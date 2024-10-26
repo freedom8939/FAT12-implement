@@ -11,6 +11,7 @@
 #define ROOT_DICT_NUM 224  //根目录数
 #define FAT_SECTOR_NUM 9 //FAT扇区数字 9
 #define DISK_ALL_SIZE 2880
+#define Num_Of_Fat 2047
 
 /**
 * 定义数据类型
@@ -24,10 +25,17 @@ typedef char Sector[SECTOR_SIZE];   //数据区大小
 * FAT表项结构
  * 注意取消字节对齐
 */
+//typedef struct FATEntry {
+//    uint16_t firstEntry : 12;
+//    uint16_t secondEntry : 12;
+//} __attribute__((packed)) FATEntry;
+
 typedef struct FATEntry {
-    int firstEntry: 12;
-    int secondEntry: 12;
+    uint8_t data[3];
 } __attribute__((packed)) FATEntry;
+
+
+
 
 /**
  * MBR部分
@@ -77,6 +85,7 @@ typedef struct MBRHeader {
     char end_point[2];
 } __attribute__((packed)) MBRHeader;
 
+
 /**
  *  根目录区条目格式
  */
@@ -95,8 +104,8 @@ typedef struct RootEntry {
  */
 struct Disk {
     MBRHeader MBR;  //1个扇区
-    FATEntry FAT1[192];     //9个扇区 全部表示出来的
-    FATEntry FAT2[192];     // copy fat1
+    FATEntry FAT1[1536];     //9个扇区 全部表示出来的
+    FATEntry FAT2[1536];     // copy fat1
     RootEntry rootDirectory[ROOT_DICT_NUM];   //
     Sector dataSector[DATA_SECTOR_NUM]; //2880个扇区
 };

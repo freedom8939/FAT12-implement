@@ -48,16 +48,16 @@ void InitFAT() {
     memset(disk.FAT2, 0x00, sizeof(disk.FAT2));
 
     // 初始化第一个 FAT 表条目
-    disk.FAT1[0].firstEntry = 0xFF0;  // 第一个条目表示介质类型（0xF0表示软盘）
-    disk.FAT1[0].secondEntry = 0xFFF; // 第二个条目表示结束标记
+//    disk.FAT1[0].firstEntry = 0xFF0;  // 第一个条目表示介质类型（0xF0表示软盘）
+//    disk.FAT1[0].secondEntry = 0xFFF; // 第二个条目表示结束标记
 
     // 将 FAT1 复制到 FAT2
     memcpy(disk.FAT2, disk.FAT1, sizeof(disk.FAT1));
 
     // 初始化其他 FAT 表条目（根据需要设置）
     for (int i = 1; i < sizeof(disk.FAT1) / sizeof(FATEntry); i++) {
-        disk.FAT1[i].firstEntry = 0x000;  // 未使用的簇
-        disk.FAT1[i].secondEntry = 0x000; // 未使用的簇
+//        disk.FAT1[i].firstEntry = 0x000;  // 未使用的簇
+//        disk.FAT1[i].secondEntry = 0x000; // 未使用的簇
     }
 
     // 复制初始化后的 FAT1 到 FAT2
@@ -95,6 +95,19 @@ void print_MBR(MBRHeader *temp) {
 
 }
 
+void read_fat_from_vfd(char *vfd_file){
+    FILE *file = fopen(vfd_file, "rb");
+    if (!file) {
+        perror("无法打开 VFD 文件");
+        return;
+    }
+    fseek(file,512,SEEK_SET);
+    fread(&disk.FAT1, sizeof(FATEntry), 192, file);  // 读取192个FATEntry
+
+
+    fclose(file);
+}
+
 /**
  * 读取镜像的mbr文件列表并且展示在控制台
  */
@@ -120,7 +133,7 @@ void read_mbr_from_vfd(char *vfd_file) {
     uint16_t read_size = fread(disk.rootDirectory, sizeof(RootEntry), disk.MBR.BPB_RootEntCnt, boot);
 
     if (read_size != 224) {  //本地写死 老师提供的磁盘为112
-        perror("读取根目录失败，请检查文件");
+        perror("读取根目录失败，请检查文11111件");
         fclose(boot);
         return;
     }
@@ -190,20 +203,6 @@ void dir() {
  * @param currentCluster 当前簇号
  * @return 下一个簇号
  */
-uint16_t getNextCluster(uint16_t currentCluster) {
-    uint32_t fatOffset = (currentCluster * 3) / 2;
-    uint16_t nextCluster;
-
-    if (currentCluster % 2 == 0) {
-        // 偶数簇号：从FAT表中获取低 12 位
-        nextCluster = (*(uint16_t*)&disk.FAT1[fatOffset]) & 0x0FFF;
-    } else {
-        // 奇数簇号：从FAT表中获取高 12 位
-        nextCluster = (*(uint16_t*)&disk.FAT1[fatOffset] >> 4) & 0x0FFF;
-    }
-
-    return nextCluster;
-}
 
 /**
  * 查找文件Entry块
@@ -248,93 +247,119 @@ RootEntry *findFile(const string &fileName) {
     return NULL;
 }
 
+
+/**
+ * 从给定的缓冲区获取下一个簇号
+ * @param buffer 指向存储 FAT 数据的缓冲区
+ * @param flag 指示位，用于决定如何读取簇号
+ * @return 返回下一个簇号
+ */
+unsigned short getClus(unsigned char *buffer, char flag) {
+    unsigned short ans = 0;
+    if (!flag) {
+        ans += buffer[0];
+        ans += (buffer[1] << 8) & 0xFFF; // 只取低12位
+    } else {
+        ans += buffer[1] << 4;
+        ans += buffer[0] >> 4; // 取高4位
+    }
+    return ans;
+}
+
+/**
+ * 获取下一个簇号
+ * @param cluster 当前簇号
+ * @return 返回下一个簇号
+ */
+uint16_t getNextCluster(uint16_t currentCluster) {
+    uint32_t fatOffset = currentCluster * 3 / 2;
+    uint8_t fatSector[SECTOR_SIZE];
+
+    FILE *vfdFile = fopen(PATH, "rb");
+    if (!vfdFile) {
+        perror("Unable to open VFD file");
+        return 0;
+    }
+
+    fseek(vfdFile, fatOffset / SECTOR_SIZE * SECTOR_SIZE, SEEK_SET);
+    fread(fatSector, 1, SECTOR_SIZE, vfdFile);
+    fclose(vfdFile);
+
+    // 获取下一个簇的值
+    if (currentCluster % 2 == 0) {
+        return (fatSector[fatOffset % SECTOR_SIZE] | (fatSector[fatOffset % SECTOR_SIZE + 1] << 8)) & 0x0FFF;
+    } else {
+        return (fatSector[fatOffset % SECTOR_SIZE] >> 4 | (fatSector[fatOffset % SECTOR_SIZE + 1] << 4)) & 0x0FFF;
+    }
+}
+
+
 /**
  * 文件的第一个簇号
  * @param firstCluster  第一个簇号
  * @param size   读取的大小 （bug）
  */
+/**
+ * 读取文件数据
+ * @param firstCluster 第一个簇号
+ * @param fileSize 文件大小
+ */
+/**
+ * 读取文件数据
+ * @param firstCluster 第一个簇号
+ * @param fileSize 文件大小
+ */
+
 void readFileData(uint16_t firstCluster, uint32_t fileSize) {
-    uint32_t clusterSize = disk.MBR.BPB_SecPerClus * disk.MBR.BPB_BytesPerSec;
-    uint32_t firstDataSector = 1 + (disk.MBR.BPB_NumFATs * disk.MBR.BPB_FATSz16) +
-                               (disk.MBR.BPB_RootEntCnt * sizeof(RootEntry) / disk.MBR.BPB_BytesPerSec);
+    uint8_t sectorsPerCluster = disk.MBR.BPB_SecPerClus; // 每个簇的扇区数
+    uint32_t fatSize = disk.MBR.BPB_FATSz16; // FAT 的大小
+    uint32_t fatStartSector = 1; // FAT 起始扇区
+    uint32_t dataStartSector = fatStartSector + (disk.MBR.BPB_NumFATs * fatSize) + (disk.MBR.BPB_RootEntCnt * sizeof(RootEntry) / disk.MBR.BPB_BytesPerSec);
 
     uint16_t currentCluster = firstCluster;
-    uint32_t bytesReadTotal = 0;
+    uint32_t bytesRead = 0;
 
-    FILE *diskImage = fopen(PATH, "rb");
-    if (!diskImage) {
-        printf("无法打开磁盘");
-        exit(0);
-    }
+    while (bytesRead < fileSize) {
+        // 计算当前簇对应的起始扇区
+        uint32_t clusterSector = dataStartSector + (currentCluster - 2) * sectorsPerCluster;
 
-    char buffer[512] = {0};
+        // 用于存储读取的字节
+        uint8_t buffer[SECTOR_SIZE];
 
-    while (bytesReadTotal < fileSize && currentCluster < 0xFF8) { // 0xFF8表示结束
-        // 计算当前簇的偏移
-        uint32_t clusterOffset = (firstDataSector + (currentCluster - 2) * disk.MBR.BPB_SecPerClus) * disk.MBR.BPB_BytesPerSec;
+        // 逐扇区读取数据
+        for (uint8_t sector = 0; sector < sectorsPerCluster; ++sector) {
+            if (bytesRead >= fileSize) break; // 如果已读取完毕，退出循环
 
-        // 打印调试信息
-        printf("读取簇: %u, 偏移: %u\n", currentCluster, clusterOffset);
-
-        // 设置文件指针
-        if (fseek(diskImage, clusterOffset, SEEK_SET) != 0) {
-            perror("设置文件指针时出错");
-            break;
-        }
-
-        // 计算要读取的字节数
-        uint32_t bytesToRead = (fileSize - bytesReadTotal < clusterSize) ? fileSize - bytesReadTotal : clusterSize;
-        size_t bytesRead = fread(buffer, sizeof(char), bytesToRead, diskImage);
-
-        if (bytesRead == 0) {
-            perror("读取数据时出错");
-            break;
-        }
-
-        // 打印读取的数据
-        for (uint32_t i = 0; i < bytesRead; i++) {
-            if (isprint(buffer[i])) {
-                printf("%c", buffer[i]);
-            } else {
-                printf(".");
+            FILE *vfdFile = fopen(PATH, "rb");
+            if (!vfdFile) {
+                perror("Unable to open VFD file");
+                return;
             }
-            if ((i + 1) % 64 == 0) {
-                printf("\n");
+
+            // 读取当前扇区
+            fseek(vfdFile, (clusterSector + sector) * SECTOR_SIZE, SEEK_SET);
+            size_t readSize = fread(buffer, 1, SECTOR_SIZE, vfdFile);
+            fclose(vfdFile);
+
+            // 输出读取的数据
+            for (size_t i = 0; i < readSize && bytesRead < fileSize; ++i, ++bytesRead) {
+                putchar(buffer[i]); // 输出字符到控制台
             }
         }
 
-        bytesReadTotal += bytesRead;
-
-        // 获取下一个簇号
-        currentCluster = getNextCluster(currentCluster);
-
-        if (currentCluster >= 0xFF8) {
-            break; // 结束
+        unsigned short nextClusNum = getClus(&disk.FAT1[currentCluster / 2].data[currentCluster % 2], currentCluster % 2);
+        currentCluster = nextClusNum;
+        // 从 FAT 表中获取下一个簇的值
+//        currentCluster = getNextCluster(currentCluster);
+       
+        // 如果获取的下一个簇是 EOF，结束读取
+        if (currentCluster >= 0x0FF8) { // 对于 FAT12，0x0FF8 及以上的簇表示 EOF
+            break;
         }
     }
 
-    printf("\n读取完成，共读取 %u 字节\n", bytesReadTotal);
-    fclose(diskImage);
-}
-
-
-void cat(string &_name) {
-    // 提取文件名
-    string fileFullName = _name.substr(4); // 从 "cat " 后开始
-    // 查找文件条目
-    RootEntry *fileEntry = findFile(fileFullName);
-    if (fileEntry) {
-
-        // 如果找到文件条目，输出找到的文件信息
-//        cout << "起始簇号" << fileEntry->DIR_FstClus << "号簇" << endl;
-//        cout << "文件大小: " << fileEntry->DIR_FileSize << " 字节" << endl;
-        // 从目录项中获取起始簇号
-        uint16_t firstCluster = fileEntry->DIR_FstClus;
-        //一次读一个扇区
-//        readFileData(firstCluster,fileEntry->DIR_FileSize-2);
-    } else {
-        cout << "文件未找到: " << fileFullName << endl;
-    }
+    // 换行以结束输出
+    putchar('\n');
 }
 
 void executeCommand(string &command) {
@@ -353,6 +378,23 @@ void executeCommand(string &command) {
 
 
 
+void cat(string &_name) {
+    // 提取文件名
+    string fileFullName = _name.substr(4); // 从 "cat " 后开始
+    // 查找文件条目
+    RootEntry *fileEntry = findFile(fileFullName);
+    if (fileEntry) {
+        // 如果找到文件条目，输出找到的文件信息
+//        cout << "起始簇号" << fileEntry->DIR_FstClus << "号簇" << endl;
+//        cout << "文件大小: " << fileEntry->DIR_FileSize << " 字节" << endl;
+        // 从目录项中获取起始簇号
+        uint16_t firstCluster = fileEntry->DIR_FstClus;
+        //一次读一个扇区
+        readFileData(firstCluster,fileEntry->DIR_FileSize);
+    } else {
+        cout << "文件未找到: " << fileFullName << endl;
+    }
+}
 int main() {
     string command;
     cout << "可使用命令:" << endl;
@@ -361,7 +403,14 @@ int main() {
     cout << "(3):exit" << endl;
 //    InitMBR(&disk);  //初始化磁盘MBR信息 mock的本地数据
     read_mbr_from_vfd(PATH);
+    read_fat_from_vfd(PATH);
 //    InitFAT();  //初始化磁盘fat mock本地数据使用
+//    unsigned short i = getClus(&disk.FAT1[clus /2].data[clus %2],clus %2);
+//    cout << i;
+//    int clus  = 7;
+//    cout << getClus(&disk.FAT1[clus /2].data[clus %2],clus %2);
+
+
     while (1) {
         cout << ">:";
         getline(cin, command);
