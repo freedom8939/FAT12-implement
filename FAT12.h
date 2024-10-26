@@ -1,17 +1,24 @@
-//
-// Created by 王金园 on 2024/10/21.
-//
-#include "bits/stdc++.h"  //本地开发直接引入万能头
+/**
+ * Created by 王金园 on 2024/10/21.
+ */
+#include <cstdio>
+#include <iostream>
+#include <string>
+#include <cstdio>
+#include <cstring>
+#include <iomanip>
+
+using namespace std;
+#define PATH "G:\\OS-homework\\grp07\\wjyImg.vfd"
 
 /**
-* 定义磁盘的信息（并未引入教师的磁盘）
+* 定义磁盘的信息（并未引入教师的磁盘)
 */
-#define SECTOR_SIZE 512  //扇区大小默认512
-#define DATA_SECTOR_NUM 2847  //数据扇区数
-#define ROOT_DICT_NUM 224  //根目录数
-#define FAT_SECTOR_NUM 9 //FAT扇区数字 9
-#define DISK_ALL_SIZE 2880
-#define Num_Of_Fat 2047
+#define SECTOR_SIZE 512        //扇区大小默认512
+#define DATA_SECTOR_NUM 2847   //数据扇区数
+#define ROOT_DICT_NUM 224      //根目录数
+#define FAT_SECTOR_NUM 9        //FAT扇区数
+
 
 /**
 * 定义数据类型
@@ -20,25 +27,16 @@ typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
 typedef char Sector[SECTOR_SIZE];   //数据区大小
-
+#pragma pack(1)
 /**
-* FAT表项结构
- * 注意取消字节对齐
-*/
-//typedef struct FATEntry {
-//    uint16_t firstEntry : 12;
-//    uint16_t secondEntry : 12;
-//} __attribute__((packed)) FATEntry;
-
+ * FAT表项结构
+ */
 typedef struct FATEntry {
-    uint8_t data[3];
-} __attribute__((packed)) FATEntry;
-
-
-
+    uint8_t data[3]; //3字节 24位  两个簇号
+} FATEntry;
 
 /**
- * MBR部分
+ * MBR
  */
 typedef struct MBRHeader {
     char BS_jmpBOOT[3];
@@ -83,11 +81,10 @@ typedef struct MBRHeader {
     char code[448];
     //结束标志
     char end_point[2];
-} __attribute__((packed)) MBRHeader;
-
+} MBRHeader;
 
 /**
- *  根目录区条目格式
+ *  根目录区格式
  */
 typedef struct RootEntry {
     uint8_t DIR_Name[11];//文件名与扩展名
@@ -97,27 +94,140 @@ typedef struct RootEntry {
     uint8_t DIR_WrtDate[2];//最后一次写入日期
     uint16_t DIR_FstClus;//文件开始的簇号
     uint32_t DIR_FileSize;//文件大小
-} __attribute__((packed)) RootEntry;
+} RootEntry;
 
 /**
- * 定义磁盘FAT12属性
+ * 定义磁盘
  */
 struct Disk {
     MBRHeader MBR;  //1个扇区
     FATEntry FAT1[1536];     //9个扇区 全部表示出来的
     FATEntry FAT2[1536];     // copy fat1
-    RootEntry rootDirectory[ROOT_DICT_NUM];   //
+    RootEntry rootDirectory[ROOT_DICT_NUM];   //根目录区
     Sector dataSector[DATA_SECTOR_NUM]; //2880个扇区
 };
+extern Disk disk;
+#pragma pack()
 
-void InitMBR(Disk *disk);
+//初始化MBR
+void InitMBR(Disk *disk){
+    memset(disk->MBR.BS_jmpBOOT, 3, 0);
+    memcpy(disk->MBR.BS_OEMName, "LNNU WJY", 8);
+    disk->MBR.BPB_BytesPerSec = 512;
+    disk->MBR.BPB_SecPerClus = 1;
+    disk->MBR.BPB_ResvdSecCnt = 1;
+    disk->MBR.BPB_NumFATs = 2;
+    disk->MBR.BPB_RootEntCnt = ROOT_DICT_NUM;
+    disk->MBR.BPB_TotSec16 = 2880;
+    disk->MBR.BPB_Media = 0xf0;
+    disk->MBR.BPB_FATSz16 = FAT_SECTOR_NUM;
+    disk->MBR.BPB_SecPerTrk = 0x12;
+    disk->MBR.BPB_NumHeads = 0x2;
+    disk->MBR.BPB_HiddSec = 0;
+    disk->MBR.BPB_TotSec32 = 0;
+    disk->MBR.BS_DrvNum = 0;
+    disk->MBR.BS_Reserved1 = 0;
+    disk->MBR.BS_BootSig = 0x29;
+    disk->MBR.BS_VollD = 0;
+    memcpy(disk->MBR.BS_VolLab, "C", 1);
+    memcpy(disk->MBR.BS_FileSysType, "FAT12", 5);
+    memset(disk->MBR.code, 0, 448);
+    disk->MBR.end_point[0] = 0x55;
+    disk->MBR.end_point[1] = 0xAA;
+}
 
-void print_MBR(MBRHeader *temp);
+//打印MBR
+void print_MBR(MBRHeader *temp){
+    printf("Disk Name - 磁盘名称: %s\n", temp->BS_OEMName);
+    printf("Sector Size - 扇区大小: %d\n", temp->BPB_BytesPerSec);
+    printf("Sectors per cluster - 每簇扇区数: %d\n", temp->BPB_SecPerClus);
+    printf("Number of sectors occupied by boot - 引导占用的扇区数: %d\n", temp->BPB_ResvdSecCnt);
+    printf("Number of FATs - FAT 表数量: %d\n", temp->BPB_NumFATs);
+    printf("The max capacity of root entry - 根目录最大条目数: %d\n", temp->BPB_RootEntCnt);
+    printf("The number of all Sectors - 扇区总数: %d\n", temp->BPB_TotSec16);
+// printf("Media Descriptor - 媒体描述符: %c\n", temp->BPB_Media);
+    printf("The number of Sectors of each Fat table - 每个 FAT 表占用的扇区数: %d\n", temp->BPB_FATSz16);
+    printf("Number of sectors per track - 每个磁道的扇区数: %d\n", temp->BPB_SecPerTrk);
+    printf("The number of magnetic read head - 磁头数量: %d\n", temp->BPB_NumHeads);
+    printf("Number of hidden sectors - 隐藏扇区数: %d\n", temp->BPB_HiddSec);
+    printf("Volume serial number - 卷序列号: %d\n", temp->BS_VollD);
+    printf("Volume label - 卷标: ");
+    for (int i = 0; i < 11; i++) {
+        printf("%c", temp->BS_VolLab[i]);
+    }
+    printf("\n");
+    printf("File system type - 文件系统类型: ");
+    for (int i = 0; i < 8; i++) {
+        printf("%c", temp->BS_FileSysType[i]);
+    }
+    printf("\n");
+}
 
-void InitFAT();
+//初始化FAT表
+void InitFAT(){
+    memset(disk.FAT1, 0x00, sizeof(disk.FAT1));
+    memset(disk.FAT2, 0x00, sizeof(disk.FAT2));
 
+    // 初始化第一个 FAT 表条目
+//    disk.FAT1[0].firstEntry = 0xFF0;  // 第一个条目表示介质类型（0xF0表示软盘）
+//    disk.FAT1[0].secondEntry = 0xFFF; // 第二个条目表示结束标记
+
+    // 将 FAT1 复制到 FAT2
+    memcpy(disk.FAT2, disk.FAT1, sizeof(disk.FAT1));
+
+    // 初始化其他 FAT 表条目（根据需要设置）
+    for (int i = 1; i < sizeof(disk.FAT1) / sizeof(FATEntry); i++) {
+//        disk.FAT1[i].firstEntry = 0x000;  // 未使用的簇
+//        disk.FAT1[i].secondEntry = 0x000; // 未使用的簇
+    }
+
+    // 复制初始化后的 FAT1 到 FAT2
+    memcpy(disk.FAT2, disk.FAT1, sizeof(disk.FAT1));
+}
+
+//从VFD中读出mbr
 void read_mbr_from_vfd(char *vfd_file);
+
+
+//进入文件夹命令
+void cd(string &_name);
+
+//查看文件
+void cat(string &_name);
+
+//转字符串为小写
+void toLowerCase(string &str){
+    for (char &c: str) {
+        c = tolower(c); // 将每个字符转换为小写
+    }
+}
+
+//读取数据
+void readFileData(uint16_t firstCluster, uint32_t fileSize);
+
+//根目录下查找文件FATEntry
+RootEntry *findFile(const string &fileName);
+
+
+//执行命令
+void executeCommand(string &command);
+//从vfd读取fat表到本地磁盘
+void read_fat_from_vfd(char *vfd_file);
+
+//查看所有目录
 void dir();
 
+//获取簇号
+unsigned short getClus(unsigned char *buffer, char flag);
 
+// 命令列表
+string command;
 
+void showCommandList() {
+    cout << "可使用命令:" << endl;
+    cout << "(1):dir" << endl;
+    cout << "(2):cat 文件名" << endl;
+    cout << "(3):cd 文件夹" << endl;
+    cout << "(4):cls" << endl;
+    cout << "(0):exit" << endl;
+}
