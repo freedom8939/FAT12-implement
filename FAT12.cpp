@@ -1,7 +1,12 @@
 #include "FAT12.h"
+
 using namespace std;
 #define PATH "G:\\OS-homework\\grp07\\wjyImg.vfd"
 Disk disk;
+
+uint16_t parentDirectoryClusterNum = 2; // 初始设置为根目录簇号（通常根目录的簇号为2）
+
+FILE *diskFile = fopen(PATH, "rb");
 
 //函数声明（少部分）
 RootEntry *findFile(const string &fileName);
@@ -95,13 +100,13 @@ void print_MBR(MBRHeader *temp) {
 
 }
 
-void read_fat_from_vfd(char *vfd_file){
+void read_fat_from_vfd(char *vfd_file) {
     FILE *file = fopen(vfd_file, "rb");
     if (!file) {
         perror("无法打开 VFD 文件");
         return;
     }
-    fseek(file,512,SEEK_SET);
+    fseek(file, 512, SEEK_SET);
     fread(&disk.FAT1, sizeof(FATEntry), 192, file);  // 读取192个FATEntry
 
 
@@ -198,11 +203,7 @@ void dir() {
         }
     }
 }
-/**
- * 获取 FAT12 中下一个簇号
- * @param currentCluster 当前簇号
- * @return 下一个簇号
- */
+
 
 /**
  * 查找文件Entry块
@@ -247,7 +248,6 @@ RootEntry *findFile(const string &fileName) {
     return NULL;
 }
 
-
 /**
  * 从给定的缓冲区获取下一个簇号
  * @param buffer 指向存储 FAT 数据的缓冲区
@@ -267,54 +267,16 @@ unsigned short getClus(unsigned char *buffer, char flag) {
 }
 
 /**
- * 获取下一个簇号
- * @param cluster 当前簇号
- * @return 返回下一个簇号
- */
-uint16_t getNextCluster(uint16_t currentCluster) {
-    uint32_t fatOffset = currentCluster * 3 / 2;
-    uint8_t fatSector[SECTOR_SIZE];
-
-    FILE *vfdFile = fopen(PATH, "rb");
-    if (!vfdFile) {
-        perror("Unable to open VFD file");
-        return 0;
-    }
-
-    fseek(vfdFile, fatOffset / SECTOR_SIZE * SECTOR_SIZE, SEEK_SET);
-    fread(fatSector, 1, SECTOR_SIZE, vfdFile);
-    fclose(vfdFile);
-
-    // 获取下一个簇的值
-    if (currentCluster % 2 == 0) {
-        return (fatSector[fatOffset % SECTOR_SIZE] | (fatSector[fatOffset % SECTOR_SIZE + 1] << 8)) & 0x0FFF;
-    } else {
-        return (fatSector[fatOffset % SECTOR_SIZE] >> 4 | (fatSector[fatOffset % SECTOR_SIZE + 1] << 4)) & 0x0FFF;
-    }
-}
-
-
-/**
- * 文件的第一个簇号
- * @param firstCluster  第一个簇号
- * @param size   读取的大小 （bug）
- */
-/**
  * 读取文件数据
  * @param firstCluster 第一个簇号
  * @param fileSize 文件大小
  */
-/**
- * 读取文件数据
- * @param firstCluster 第一个簇号
- * @param fileSize 文件大小
- */
-
 void readFileData(uint16_t firstCluster, uint32_t fileSize) {
     uint8_t sectorsPerCluster = disk.MBR.BPB_SecPerClus; // 每个簇的扇区数
     uint32_t fatSize = disk.MBR.BPB_FATSz16; // FAT 的大小
     uint32_t fatStartSector = 1; // FAT 起始扇区
-    uint32_t dataStartSector = fatStartSector + (disk.MBR.BPB_NumFATs * fatSize) + (disk.MBR.BPB_RootEntCnt * sizeof(RootEntry) / disk.MBR.BPB_BytesPerSec);
+    uint32_t dataStartSector = fatStartSector + (disk.MBR.BPB_NumFATs * fatSize) +
+                               (disk.MBR.BPB_RootEntCnt * sizeof(RootEntry) / disk.MBR.BPB_BytesPerSec);
 
     uint16_t currentCluster = firstCluster;
     uint32_t bytesRead = 0;
@@ -347,11 +309,12 @@ void readFileData(uint16_t firstCluster, uint32_t fileSize) {
             }
         }
 
-        unsigned short nextClusNum = getClus(&disk.FAT1[currentCluster / 2].data[currentCluster % 2], currentCluster % 2);
+        unsigned short nextClusNum = getClus(&disk.FAT1[currentCluster / 2].data[currentCluster % 2],
+                                             currentCluster % 2);
         currentCluster = nextClusNum;
         // 从 FAT 表中获取下一个簇的值
 //        currentCluster = getNextCluster(currentCluster);
-       
+
         // 如果获取的下一个簇是 EOF，结束读取
         if (currentCluster >= 0x0FF8) { // 对于 FAT12，0x0FF8 及以上的簇表示 EOF
             break;
@@ -362,8 +325,70 @@ void readFileData(uint16_t firstCluster, uint32_t fileSize) {
     putchar('\n');
 }
 
-void executeCommand(string &command) {
+void toLowerCase(string &str) {
+    for (char &c: str) {
+        c = tolower(c); // 将每个字符转换为小写
+    }
+}
 
+uint16_t getParentCluster(uint16_t currentCluster) {
+    // TODO: 实现逻辑来获取当前簇的父目录簇号
+    // 这里返回的值应根据你的文件系统结构来确定
+    // 例如，如果根目录的簇号是 2，那么上一级可以返回 0（表示无上级）
+    return 0; // 示例返回
+}
+
+void cd(string &_name) {
+    string fileFullName = _name.substr(3); // 从 "cat " 后开始
+    toLowerCase(fileFullName);
+    for (uint16_t i = 0; i < disk.MBR.BPB_RootEntCnt; i++) {
+        if (disk.rootDirectory[i].DIR_Name[0] == 0) continue;
+        uint8_t file_name[9];
+        memcpy(file_name, disk.rootDirectory[i].DIR_Name, 8);
+        file_name[8] = '\0';
+        std::string actual_name(reinterpret_cast<char *>(file_name));
+        actual_name = actual_name.substr(0, actual_name.find_last_not_of(' ') + 1);
+        toLowerCase(actual_name);
+
+        if(fileFullName == "/"){
+            fseek(diskFile, 19*512, SEEK_SET);
+            fread(disk.rootDirectory, 1, SECTOR_SIZE, diskFile);
+            cout << "已返回根目录" << endl;
+            return;
+        }
+
+        if (fileFullName == ".") { // 当前目录
+            cout << "您正处于当前目录" <<endl;
+            return;
+        }
+
+        if (fileFullName == "..") { // 返回上一级目录
+            cout << "已返回上一级目录" << endl;
+            return;
+        }
+
+
+        if (fileFullName == actual_name && disk.rootDirectory[i].DIR_Attr & 0x10) {
+//            cout << "找到，起始簇号是" << disk.rootDirectory[i].DIR_FstClus << endl;
+
+            //三号簇 起始33
+//            33 * 512 + 3 * 512  = （33 +  (x -2)） *512
+            uint16_t offset = (33 + (disk.rootDirectory[i].DIR_FstClus - 2)) * 512;
+//            cout << "offset是" << offset << endl;
+            FILE *diskFile = fopen(PATH, "rb");
+            if (diskFile == nullptr) {
+                cout << "无法打开磁盘映像文件！" << endl;
+                return;
+            }
+            fseek(diskFile, offset, SEEK_SET);
+            fread(disk.rootDirectory, 1, SECTOR_SIZE, diskFile);
+            return;
+        }
+    }
+    cout << "未找到" << endl;
+}
+
+void executeCommand(string &command) {
     if (command == "dir") {
         dir(); // 显示根目录的结构
     } else if (command == "exit") {
@@ -371,12 +396,12 @@ void executeCommand(string &command) {
         exit(0);
     } else if (command.substr(0, 4) == "cat ") { // 必须是 cat空格 命令开头
         cat(command); // 调用 cat 函数
+    } else if (command.substr(0, 3) == "cd ") { // 必须是 cd空格 命令开头
+        cd(command); // 调用 cd 函数
     } else {
         cout << "未知命令: " << command << endl;
     }
 }
-
-
 
 void cat(string &_name) {
     // 提取文件名
@@ -390,27 +415,23 @@ void cat(string &_name) {
         // 从目录项中获取起始簇号
         uint16_t firstCluster = fileEntry->DIR_FstClus;
         //一次读一个扇区
-        readFileData(firstCluster,fileEntry->DIR_FileSize);
+        readFileData(firstCluster, fileEntry->DIR_FileSize);
     } else {
         cout << "文件未找到: " << fileFullName << endl;
     }
 }
+
 int main() {
     string command;
     cout << "可使用命令:" << endl;
     cout << "(1):dir" << endl;
     cout << "(2):cat 文件名" << endl;
-    cout << "(3):exit" << endl;
+    cout << "(3):cd 文件夹" << endl;
+    cout << "(0):exit" << endl;
 //    InitMBR(&disk);  //初始化磁盘MBR信息 mock的本地数据
     read_mbr_from_vfd(PATH);
     read_fat_from_vfd(PATH);
 //    InitFAT();  //初始化磁盘fat mock本地数据使用
-//    unsigned short i = getClus(&disk.FAT1[clus /2].data[clus %2],clus %2);
-//    cout << i;
-//    int clus  = 7;
-//    cout << getClus(&disk.FAT1[clus /2].data[clus %2],clus %2);
-
-
     while (1) {
         cout << ">:";
         getline(cin, command);
