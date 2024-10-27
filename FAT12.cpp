@@ -14,6 +14,8 @@ void read_fat_from_vfd(char *vfd_file) {
     fread(&disk.FAT1, sizeof(FATEntry), 1536, diskFile);
 }
 
+
+
 /**
  * 读取镜像的mbr到本地磁盘
  */
@@ -156,15 +158,25 @@ void readFileData(uint16_t firstCluster, uint32_t fileSize) {
 void cd(string &_name) {
     string fileFullName = _name.substr(3); // 从 "cd " 后开始
     toLowerCase(fileFullName);
+    if(fileFullName == "."){
+        cout << "已在当前目录" << endl;
+        return;
+    }
+    if(fileFullName == "/"){
+        uint16_t offset = (19) * SECTOR_SIZE;
+        fseek(diskFile, offset, SEEK_SET);
+        fread(disk.rootDirectory, 1, disk.MBR.BPB_RootEntCnt, diskFile);
+        cout << "已回到根目录" << endl;
+        return;
+    }
+
     if (fileFullName == "..") {
-        if(clusterStack.top()== 2){
-            cout << "已经处于根目录" << endl;
+        if(clusterStack.empty()){
             return;
         }
         if (!clusterStack.empty()) {
-            if(!hasSubdirectories()){ //如果有子目录 弹出栈
-                clusterStack.pop();
-            }
+//            if(!hasSubdirectories()){ //如果有子目录 弹出栈
+//            }
             //上一层的簇号
             uint8_t tempClusterNum = clusterStack.top();
             clusterStack.pop(); // 弹出当前目录的簇号
@@ -258,6 +270,8 @@ void cat(string &_name) {
 int main() {
     showCommandList();
     Init();
+
+
     while (true) {
         cout << "A>:";
         getline(cin, command);

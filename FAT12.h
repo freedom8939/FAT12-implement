@@ -264,11 +264,11 @@ void te(const stack<uint16_t> &clusterStack) {
     }
     bool subdirectories = hasSubdirectories();
     cout << endl;
-    /*if (subdirectories) {
-        cout << "有子目录" << endl;
-    } else {
-        cout << "没有子目录" << endl;
-    }*/
+//    if (subdirectories) {
+//        cout << "有子目录" << endl;
+//    } else {
+//        cout << "没有子目录" << endl;
+//    }
 
 }
 
