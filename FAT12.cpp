@@ -2,6 +2,7 @@
 #include "dir.h"
 
 Disk disk;
+RootEntry root;
 
 FILE *diskFile = fopen(PATH, "rb");
 
@@ -153,45 +154,63 @@ void readFileData(uint16_t firstCluster, uint32_t fileSize) {
  * @param _name
  */
 void cd(string &_name) {
-    string fileFullName = _name.substr(3); // 从 "cat " 后开始
+    string fileFullName = _name.substr(3); // 从 "cd " 后开始
     toLowerCase(fileFullName);
+    if (fileFullName == "..") {
+        if(clusterStack.top()== 2){
+            cout << "已经处于根目录" << endl;
+            return;
+        }
+        if (!clusterStack.empty()) {
+            if(!hasSubdirectories()){ //如果有子目录 弹出栈
+                clusterStack.pop();
+            }
+            //上一层的簇号
+            uint8_t tempClusterNum = clusterStack.top();
+            clusterStack.pop(); // 弹出当前目录的簇号
+            //特殊的回到根目录如果tempClusterNum =2
+            if (tempClusterNum == 2) {
+                uint16_t offset = (19 + (tempClusterNum - 2)) * SECTOR_SIZE;
+                fseek(diskFile, offset, SEEK_SET);
+                fread(disk.rootDirectory, 1, disk.MBR.BPB_RootEntCnt, diskFile);
+                cout << "已返回上一级目录" << endl;
+                return;
+            }
+            uint16_t offset = (33 + (tempClusterNum - 2)) * SECTOR_SIZE;
+            fseek(diskFile, offset, SEEK_SET);
+            fread(disk.rootDirectory, 1, disk.MBR.BPB_RootEntCnt, diskFile);
+            return;
+        } else {
+            cout << "当前已在根目录" << endl;
+        }
+        return;
+    }
+
     for (uint16_t i = 0; i < disk.MBR.BPB_RootEntCnt; i++) {
-        if (disk.rootDirectory[i].DIR_Name[0] == 0) continue;
+        if (disk.rootDirectory[i].DIR_Name[0] == 0) continue; //跳过空目录项
+        //文件名整理以便比较
         uint8_t file_name[9];
         memcpy(file_name, disk.rootDirectory[i].DIR_Name, 8);
         file_name[8] = '\0';
-        std::string actual_name(reinterpret_cast<char *>(file_name));
+        string actual_name(reinterpret_cast<char *>(file_name));
         actual_name = actual_name.substr(0, actual_name.find_last_not_of(' ') + 1);
         toLowerCase(actual_name);
 
-        if (fileFullName == "/") {
-            fseek(diskFile, 19 * 512, SEEK_SET);
-            fread(disk.rootDirectory, 1, SECTOR_SIZE, diskFile);
-            cout << "已返回根目录" << endl;
-            return;
-        }
+        if (fileFullName == actual_name && (disk.rootDirectory[i].DIR_Attr & 0x10)) { //如果是目录
+            uint16_t cluster = disk.rootDirectory[i].DIR_FstClus;
 
-        if (fileFullName == ".") { // 当前目录
-            cout << "您正处于当前目录" << endl;
-            return;
-        }
+            if(clusterStack.empty()) clusterStack.push(2);
+            clusterStack.push(cluster);
 
-        if (fileFullName == "..") { // 返回上一级目录
-            cout << "TODO已返回上一级目录" << endl;
-            return;
-        }
-
-
-        if (fileFullName == actual_name && disk.rootDirectory[i].DIR_Attr & 0x10) {
-//            cout << "找到，起始簇号是" << disk.rootDirectory[i].DIR_FstClus << endl;
-            uint16_t offset = (33 + (disk.rootDirectory[i].DIR_FstClus - 2)) * 512;
-//            cout << "offset是" << offset << endl;
+            uint16_t offset = (33 + (cluster - 2)) * SECTOR_SIZE;
             fseek(diskFile, offset, SEEK_SET);
-            fread(disk.rootDirectory, 1, SECTOR_SIZE, diskFile);
+            fread(disk.rootDirectory, 1, disk.MBR.BPB_RootEntCnt, diskFile);
+
+            cout << "进入目录：" << actual_name << endl;
             return;
         }
     }
-    cout << "未找到" << endl;
+    cout << "未找到目录: " << fileFullName << endl;
 }
 
 /**
@@ -208,6 +227,8 @@ void executeCommand(string &command) {
         cat(command); // 调用 cat 函数
     } else if (command.substr(0, 3) == "cd ") { // 必须是 cd空格 命令开头
         cd(command); // 调用 cd 函数
+    } else if (command == "te") { //过程测试
+        te(clusterStack);
     } else {
         cout << "未知命令: " << command << endl;
     }
@@ -233,10 +254,10 @@ void cat(string &_name) {
     }
 }
 
+
 int main() {
     showCommandList();
-    read_mbr_from_vfd(PATH);
-    read_fat_from_vfd(PATH);
+    Init();
     while (true) {
         cout << "A>:";
         getline(cin, command);

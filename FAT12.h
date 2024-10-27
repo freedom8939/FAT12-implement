@@ -7,6 +7,8 @@
 #include <cstdio>
 #include <cstring>
 #include <iomanip>
+#include <stack>
+#include <vector>
 
 using namespace std;
 #define PATH "G:\\OS-homework\\grp07\\wjyImg.vfd"
@@ -110,7 +112,7 @@ extern Disk disk;
 #pragma pack()
 
 //初始化MBR
-void InitMBR(Disk *disk){
+void InitMBR(Disk *disk) {
     memset(disk->MBR.BS_jmpBOOT, 3, 0);
     memcpy(disk->MBR.BS_OEMName, "LNNU WJY", 8);
     disk->MBR.BPB_BytesPerSec = 512;
@@ -137,7 +139,7 @@ void InitMBR(Disk *disk){
 }
 
 //打印MBR
-void print_MBR(MBRHeader *temp){
+void print_MBR(MBRHeader *temp) {
     printf("Disk Name - 磁盘名称: %s\n", temp->BS_OEMName);
     printf("Sector Size - 扇区大小: %d\n", temp->BPB_BytesPerSec);
     printf("Sectors per cluster - 每簇扇区数: %d\n", temp->BPB_SecPerClus);
@@ -164,7 +166,7 @@ void print_MBR(MBRHeader *temp){
 }
 
 //初始化FAT表
-void InitFAT(){
+void InitFAT() {
     memset(disk.FAT1, 0x00, sizeof(disk.FAT1));
     memset(disk.FAT2, 0x00, sizeof(disk.FAT2));
 
@@ -196,7 +198,7 @@ void cd(string &_name);
 void cat(string &_name);
 
 //转字符串为小写
-void toLowerCase(string &str){
+void toLowerCase(string &str) {
     for (char &c: str) {
         c = tolower(c); // 将每个字符转换为小写
     }
@@ -211,6 +213,7 @@ RootEntry *findFile(const string &fileName);
 
 //执行命令
 void executeCommand(string &command);
+
 //从vfd读取fat表到本地磁盘
 void read_fat_from_vfd(char *vfd_file);
 
@@ -230,4 +233,71 @@ void showCommandList() {
     cout << "(3):cd 文件夹" << endl;
     cout << "(4):cls" << endl;
     cout << "(0):exit" << endl;
+}
+
+void read_root_from_vfd(string path);
+
+bool hasSubdirectories();
+
+//目录栈
+stack<uint16_t> clusterStack; // 用来存储每一层目录的簇号
+
+
+void te(const stack<uint16_t> &clusterStack) {
+    // 创建一个临时容器来存储栈中的元素
+    vector<uint16_t> tempStack;
+    stack<uint16_t> temp = clusterStack; // 复制栈
+
+    // 将栈元素转移到临时容器
+    while (!temp.empty()) {
+        tempStack.push_back(temp.top());
+        temp.pop();
+    }
+
+    // 输出临时容器中的元素
+    cout << "当前目录簇号栈：";
+    for (size_t i = 0; i < tempStack.size(); ++i) {
+        cout << tempStack[i];
+        if (i < tempStack.size() - 1) {
+            cout << " -> "; // 只在元素之间添加分隔符
+        }
+    }
+    bool subdirectories = hasSubdirectories();
+    cout << endl;
+    /*if (subdirectories) {
+        cout << "有子目录" << endl;
+    } else {
+        cout << "没有子目录" << endl;
+    }*/
+
+}
+
+
+void Init() {
+    read_mbr_from_vfd(PATH);
+    read_fat_from_vfd(PATH);
+    clusterStack.push(2); //初始化
+}
+
+//是否有子目录
+bool hasSubdirectories() {
+    for (uint16_t i = 0; i < disk.MBR.BPB_RootEntCnt; i++) {
+        // 检查目录项是否有效
+        if (disk.rootDirectory[i].DIR_Name[0] == 0) continue;
+
+        // 检查是否是目录
+        if (disk.rootDirectory[i].DIR_Attr & 0x10) {
+            // 排除特殊的 . 和 .. 目录
+            uint8_t file_name[9];
+            memcpy(file_name, disk.rootDirectory[i].DIR_Name, 8);
+            file_name[8] = '\0';
+            string dirName(reinterpret_cast<char *>(file_name));
+            dirName = dirName.substr(0, dirName.find_last_not_of(' ') + 1);
+
+            if (dirName != "." && dirName != "..") {
+                return true; // 找到子目录
+            }
+        }
+    }
+    return false; // 没有找到子目录
 }
