@@ -14,8 +14,6 @@ void read_fat_from_vfd(char *vfd_file) {
     fread(&disk.FAT1, sizeof(FATEntry), 1536, diskFile);
 }
 
-
-
 /**
  * 读取镜像的mbr到本地磁盘
  */
@@ -237,7 +235,10 @@ void executeCommand(string &command) {
         exit(0);
     } else if (command.substr(0, 4) == "cat ") { // 必须是 cat空格 命令开头
         cat(command); // 调用 cat 函数
-    } else if (command.substr(0, 3) == "cd ") { // 必须是 cd空格 命令开头
+    } else if(command.substr(0,6) == "mkdir "){
+        mkdir(command);
+    }
+    else if (command.substr(0, 3) == "cd ") { // 必须是 cd空格 命令开头
         cd(command); // 调用 cd 函数
     } else if (command == "te") { //过程测试
         te(clusterStack);
@@ -267,11 +268,38 @@ void cat(string &_name) {
 }
 
 
+void setTime(RootEntry &entry){
+    time_t currentTime = time(NULL);
+    cout << currentTime <<endl; //时间戳
+    tm *localTime = localtime(&currentTime);
+    entry.DIR_WrtDate[0] = ((localTime->tm_year - 80) << 9) | ((localTime->tm_mon + 1) << 5) | (localTime->tm_mday);
+    entry.DIR_WrtTime[0] = (localTime->tm_hour << 11) | (localTime->tm_min << 5) | 0b00000;}
+
+//文件夹名字
+void mkdir(string &dirName){
+    RootEntry rootEntry;
+    string fileFullName = dirName.substr(5);
+    // 处理文件名
+    char _name[11] = "";
+    // 将文件夹名称复制到 _name
+    strncpy(_name, fileFullName.c_str(), 11);
+    _name[11] = '\0';
+   /* 去除空格
+    string dir_name = _name;
+    dir_name.erase(remove(dir_name.begin(), dir_name.end(), ' '), dir_name.end());
+    */
+    memcpy(rootEntry.DIR_Name,_name,11);
+    rootEntry.DIR_Attr = DIRECTORY_CODE;   //目录格式
+    memset(rootEntry.DIR_reserve,0,10);
+    //设置时间
+    setTime(rootEntry);
+    rootEntry.DIR_FileSize = SECTOR_SIZE; //直接给512
+    //mock模拟分配FAT表
+}
+
 int main() {
     showCommandList();
     Init();
-
-
     while (true) {
         cout << "A>:";
         getline(cin, command);

@@ -5,10 +5,12 @@
 #include <iostream>
 #include <string>
 #include <cstdio>
+#include <algorithm>
 #include <cstring>
 #include <iomanip>
 #include <stack>
 #include <vector>
+#include <ctime>
 
 using namespace std;
 #define PATH "G:\\OS-homework\\grp07\\wjyImg.vfd"
@@ -19,6 +21,7 @@ using namespace std;
 #define SECTOR_SIZE 512        //扇区大小默认512
 #define DATA_SECTOR_NUM 2847   //数据扇区数
 #define ROOT_DICT_NUM 224      //根目录数
+#define DIRECTORY_CODE 0x10
 #define FAT_SECTOR_NUM 9        //FAT扇区数
 
 
@@ -225,7 +228,6 @@ unsigned short getClus(unsigned char *buffer, char flag);
 
 // 命令列表
 string command;
-
 void showCommandList() {
     cout << "可使用命令:" << endl;
     cout << "(1):dir" << endl;
@@ -235,14 +237,13 @@ void showCommandList() {
     cout << "(0):exit" << endl;
 }
 
-void read_root_from_vfd(string path);
-
+//当前根目录是否有子文件夹(已排除.和..)
 bool hasSubdirectories();
 
 //目录栈
 stack<uint16_t> clusterStack; // 用来存储每一层目录的簇号
 
-
+//做测试用
 void te(const stack<uint16_t> &clusterStack) {
     // 创建一个临时容器来存储栈中的元素
     vector<uint16_t> tempStack;
@@ -272,7 +273,7 @@ void te(const stack<uint16_t> &clusterStack) {
 
 }
 
-
+//初始化FAT和MBR
 void Init() {
     read_mbr_from_vfd(PATH);
     read_fat_from_vfd(PATH);
@@ -301,3 +302,9 @@ bool hasSubdirectories() {
     }
     return false; // 没有找到子目录
 }
+
+//创建文件夹
+void mkdir(string &dirName);
+
+//设置wrTime时间等
+void setTime(RootEntry &entry);
