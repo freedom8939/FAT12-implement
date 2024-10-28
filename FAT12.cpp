@@ -88,7 +88,7 @@ RootEntry *findFile(string &fileName) {
  * @return 返回下一个簇号
  */
 unsigned short getClus(unsigned char *buffer, char flag) {
-    unsigned short ans = 0;
+    uint16_t ans = 0;
     if (!flag) {
         ans += buffer[0];
         ans += (buffer[1] << 8) & 0xFFF; // 只取低12位
@@ -98,6 +98,7 @@ unsigned short getClus(unsigned char *buffer, char flag) {
     }
     return ans;
 }
+
 
 /**
  * 读取文件数据
@@ -156,11 +157,11 @@ void readFileData(uint16_t firstCluster, uint32_t fileSize) {
 void cd(string &_name) {
     string fileFullName = _name.substr(3); // 从 "cd " 后开始
     toLowerCase(fileFullName);
-    if(fileFullName == "."){
+    if (fileFullName == ".") {
         cout << "已在当前目录" << endl;
         return;
     }
-    if(fileFullName == "/"){
+    if (fileFullName == "/") {
         uint16_t offset = (19) * SECTOR_SIZE;
         fseek(diskFile, offset, SEEK_SET);
         fread(disk.rootDirectory, 1, disk.MBR.BPB_RootEntCnt, diskFile);
@@ -169,7 +170,7 @@ void cd(string &_name) {
     }
 
     if (fileFullName == "..") {
-        if(clusterStack.empty()){
+        if (clusterStack.empty()) {
             return;
         }
         if (!clusterStack.empty()) {
@@ -209,7 +210,7 @@ void cd(string &_name) {
         if (fileFullName == actual_name && (disk.rootDirectory[i].DIR_Attr & 0x10)) { //如果是目录
             uint16_t cluster = disk.rootDirectory[i].DIR_FstClus;
 
-            if(clusterStack.empty()) clusterStack.push(2);
+            if (clusterStack.empty()) clusterStack.push(2);
             clusterStack.push(cluster);
 
             uint16_t offset = (33 + (cluster - 2)) * SECTOR_SIZE;
@@ -235,10 +236,9 @@ void executeCommand(string &command) {
         exit(0);
     } else if (command.substr(0, 4) == "cat ") { // 必须是 cat空格 命令开头
         cat(command); // 调用 cat 函数
-    } else if(command.substr(0,6) == "mkdir "){
+    } else if (command.substr(0, 6) == "mkdir ") {
         mkdir(command);
-    }
-    else if (command.substr(0, 3) == "cd ") { // 必须是 cd空格 命令开头
+    } else if (command.substr(0, 3) == "cd ") { // 必须是 cd空格 命令开头
         cd(command); // 调用 cd 函数
     } else if (command == "te") { //过程测试
         te(clusterStack);
@@ -268,34 +268,109 @@ void cat(string &_name) {
 }
 
 
-void setTime(RootEntry &entry){
+void setTime(RootEntry &entry) {
     time_t currentTime = time(NULL);
-    cout << currentTime <<endl; //时间戳
     tm *localTime = localtime(&currentTime);
-    entry.DIR_WrtDate[0] = ((localTime->tm_year - 80) << 9) | ((localTime->tm_mon + 1) << 5) | (localTime->tm_mday);
-    entry.DIR_WrtTime[0] = (localTime->tm_hour << 11) | (localTime->tm_min << 5) | 0b00000;}
+
+    // 获取并构造最后一次写入日期（16位）
+    uint16_t lastWriteDate = ((localTime->tm_year - 80) << 9) |
+                             ((localTime->tm_mon + 1) << 5) |
+                             localTime->tm_mday;
+
+    // 获取并构造最后一次写入时间（16位）
+    uint16_t lastWriteTime = (localTime->tm_hour << 11) |
+                             (localTime->tm_min << 5) |
+                             0b00000; // 秒数可以设为0或其他值
+
+    // 将构造的时间和日期存储到结构体中
+    entry.DIR_WrtDate[0] = lastWriteDate & 0xFF;           // 低字节
+    entry.DIR_WrtDate[1] = (lastWriteDate >> 8) & 0xFF;    // 高字节
+    entry.DIR_WrtTime[0] = lastWriteTime & 0xFF;           // 低字节
+    entry.DIR_WrtTime[1] = (lastWriteTime >> 8) & 0xFF;    // 高字节
+}
+
+void printRootEntry(const RootEntry &entry) {
+    // 打印文件名
+    cout << "文件名: ";
+    for (int i = 0; i < 11; ++i) {
+        cout << entry.DIR_Name[i];
+    }
+    cout << endl;
+    // 打印文件属性
+    cout << "文件属性: 0x" << hex << setw(2) << setfill('0') << static_cast<int>(entry.DIR_Attr) << endl;
+
+    // 打印保留位
+    cout << "保留位: ";
+    for (int i = 0; i < 10; ++i) {
+        cout << "0x" << hex << setw(2) << setfill('0') << static_cast<int>(entry.DIR_reserve[i]) << " ";
+    }
+    cout << endl;
+
+    // 打印最后一次写入时间
+    cout << "最后一次写入时间: "
+         << static_cast<int>(entry.DIR_WrtTime[0]) << ":"
+         << static_cast<int>(entry.DIR_WrtTime[1]) << endl;
+
+    // 打印最后一次写入日期
+    cout << "最后一次写入日期: "
+         << static_cast<int>(entry.DIR_WrtDate[0]) << "-"
+         << static_cast<int>(entry.DIR_WrtDate[1]) << endl;
+
+    // 打印文件开始的簇号
+    cout << "文件开始的簇号: " << entry.DIR_FstClus << endl;
+
+    // 打印文件大小
+    cout << "文件大小: " << entry.DIR_FileSize << " 字节" << endl;
+}
 
 //文件夹名字
-void mkdir(string &dirName){
+void mkdir(string &dirName) {
     RootEntry rootEntry;
     string fileFullName = dirName.substr(5);
+
     // 处理文件名
     char _name[11] = "";
-    // 将文件夹名称复制到 _name
     strncpy(_name, fileFullName.c_str(), 11);
     _name[11] = '\0';
-   /* 去除空格
-    string dir_name = _name;
-    dir_name.erase(remove(dir_name.begin(), dir_name.end(), ' '), dir_name.end());
-    */
-    memcpy(rootEntry.DIR_Name,_name,11);
-    rootEntry.DIR_Attr = DIRECTORY_CODE;   //目录格式
-    memset(rootEntry.DIR_reserve,0,10);
-    //设置时间
+
+    // 填充目录项
+    memset(rootEntry.DIR_Name, 0x20, sizeof(rootEntry.DIR_Name)); // 空格填充
+    strncpy(reinterpret_cast<char*>(rootEntry.DIR_Name), _name, 11);
+    rootEntry.DIR_Attr = 0x10; // 目录属性
+    memset(rootEntry.DIR_reserve, 0, sizeof(rootEntry.DIR_reserve));
+
+    // 设置时间
     setTime(rootEntry);
-    rootEntry.DIR_FileSize = SECTOR_SIZE; //直接给512
-    //mock模拟分配FAT表
+    rootEntry.DIR_FileSize = 512; // 初始大小
+
+    uint16_t cluster_num_allocated = allocateFATCluster();
+    if (cluster_num_allocated == 0xFFFF) {
+        cout << "所有簇都被分配了" << endl;
+        return;
+    }
+    rootEntry.DIR_FstClus = cluster_num_allocated;
+
+    // 更新根目录
+    for (int i = 0; i < 1536; ++i) {
+        if (disk.rootDirectory[i].DIR_Name[0] == 0x00) { // 找到空闲目录项
+            disk.rootDirectory[i] = rootEntry; // 更新内存中的根目录
+            cout << "目录创建成功, 簇号是: " << cluster_num_allocated << endl;
+
+            // 写入更新到磁盘
+            // 确保指针有效
+
+            // 设置文件指针到根目录起始位置
+            fseek(diskFile, 19*512, SEEK_SET); // ROOT_DIR_START 是根目录在磁盘上的起始偏移量
+            // 写入根目录内容到磁盘
+            fwrite(&rootEntry, sizeof(RootEntry), 1, diskFile);
+
+            return;
+        }
+    }
+
+    cout << "根目录已满，无法添加新目录。" << endl;
 }
+
 
 int main() {
     showCommandList();

@@ -13,6 +13,7 @@
 #include <ctime>
 
 using namespace std;
+
 #define PATH "G:\\OS-homework\\grp07\\wjyImg.vfd"
 
 /**
@@ -233,7 +234,6 @@ void showCommandList() {
     cout << "(1):dir" << endl;
     cout << "(2):cat 文件名" << endl;
     cout << "(3):cd 文件夹" << endl;
-    cout << "(4):cls" << endl;
     cout << "(0):exit" << endl;
 }
 
@@ -308,3 +308,28 @@ void mkdir(string &dirName);
 
 //设置wrTime时间等
 void setTime(RootEntry &entry);
+
+//分配FAT块 遍历FAT表找到空闲FAT块
+int findEmptyRootEntry() {  //1536
+    for (int i = 0; i < 1536; i++) {
+        if(disk.FAT1[i].data[0] == 0x00 &&
+                disk.FAT1[i].data[1] == 0x00 &&
+                disk.FAT1[i].data[2] == 0x00){
+            return i; //返回簇号
+        }
+    }
+    return -1;
+}
+
+//分配可用簇
+uint16_t allocateFATCluster() {
+    for (uint16_t i = 2; i < DATA_SECTOR_NUM; i++) { // 从簇号2开始查找
+        unsigned short clusterStatus = getClus(&disk.FAT1[i / 2].data[i % 2], i % 2);
+        if (clusterStatus == 0x000) { // 找到空闲的簇
+            // 将该簇标记为已分配
+            disk.FAT1[i / 2].data[i % 2] = 0xFFF;
+            return i;
+        }
+    }
+    return 0xFFFF; // 无可用簇
+}
