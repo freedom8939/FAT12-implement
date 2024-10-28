@@ -4,7 +4,6 @@
 Disk disk;
 RootEntry root;
 
-FILE *diskFile = fopen(PATH, "rb");
 
 /**
  * 读取镜像的FAT到本地磁盘
@@ -99,7 +98,6 @@ unsigned short getClus(unsigned char *buffer, char flag) {
     return ans;
 }
 
-
 /**
  * 读取文件数据
  * @param firstCluster 第一个簇号
@@ -154,70 +152,89 @@ void readFileData(uint16_t firstCluster, uint32_t fileSize) {
  * 进入文件夹
  * @param _name
  */
+
 void cd(string &_name) {
     string fileFullName = _name.substr(3); // 从 "cd " 后开始
     toLowerCase(fileFullName);
+
     if (fileFullName == ".") {
         cout << "已在当前目录" << endl;
         return;
     }
     if (fileFullName == "/") {
-        uint16_t offset = (19) * SECTOR_SIZE;
-        fseek(diskFile, offset, SEEK_SET);
-        fread(disk.rootDirectory, 1, disk.MBR.BPB_RootEntCnt, diskFile);
-        cout << "已回到根目录" << endl;
+        go_back_to_directory_position();
+        //清空路径栈
+        while (!clusterStack.empty() && clusterStack.top() != 2) {
+            clusterStack.pop();
+        }
+        while (!pathStack.empty() && pathStack.top() != "/") {
+            pathStack.pop();
+        }
         return;
     }
-
     if (fileFullName == "..") {
-        if (clusterStack.empty()) {
+
+        //如果此时栈内元素只有一个元素2代表已经在顶级目录 无法返回
+        if (clusterStack.top() == 2 || pathStack.top() == "/") {     //直接回到主目录
+            go_back_to_directory_position();
+
             return;
         }
-        if (!clusterStack.empty()) {
-//            if(!hasSubdirectories()){ //如果有子目录 弹出栈
-//            }
-            //上一层的簇号
-            uint8_t tempClusterNum = clusterStack.top();
-            clusterStack.pop(); // 弹出当前目录的簇号
-            //特殊的回到根目录如果tempClusterNum =2
-            if (tempClusterNum == 2) {
-                uint16_t offset = (19 + (tempClusterNum - 2)) * SECTOR_SIZE;
-                fseek(diskFile, offset, SEEK_SET);
-                fread(disk.rootDirectory, 1, disk.MBR.BPB_RootEntCnt, diskFile);
-                cout << "已返回上一级目录" << endl;
-                return;
-            }
-            uint16_t offset = (33 + (tempClusterNum - 2)) * SECTOR_SIZE;
-            fseek(diskFile, offset, SEEK_SET);
-            fread(disk.rootDirectory, 1, disk.MBR.BPB_RootEntCnt, diskFile);
+        //栈空不允许弹出
+        if (clusterStack.empty() || pathStack.empty()) {
             return;
-        } else {
-            cout << "当前已在根目录" << endl;
         }
+
+
+        //栈内有多种个元素的情况：
+
+        /**
+         *
+         *
+         * 9 == 9 所以 这个9出栈 然后返回簇为8 并且 更新 now_clus =8
+         * 8 == 8 所以 这个8出栈  然后返回簇为6 更新now_clus = 6
+         * 6 == 6  6出栈 返回2 now_clus =2
+         * 2 == 2 拦截器
+         */
+
+        string tempPathName = pathStack.top(); //栈顶路径
+        clusterStack.pop();
+        pathStack.pop();
+        now_clu = clusterStack.top();
+        if(now_clu == 2){
+            go_back_to_directory_position();
+            return;
+        }
+        navigator_to_specific_directory_position(now_clu);
         return;
     }
 
     for (uint16_t i = 0; i < disk.MBR.BPB_RootEntCnt; i++) {
         if (disk.rootDirectory[i].DIR_Name[0] == 0) continue; //跳过空目录项
+
         //文件名整理以便比较
-        uint8_t file_name[9];
+        char file_name[9];
+        //把前8位给file_name
         memcpy(file_name, disk.rootDirectory[i].DIR_Name, 8);
-        file_name[8] = '\0';
-        string actual_name(reinterpret_cast<char *>(file_name));
+        //转为字符串方便操作
+        string actual_name = file_name;
         actual_name = actual_name.substr(0, actual_name.find_last_not_of(' ') + 1);
         toLowerCase(actual_name);
 
         if (fileFullName == actual_name && (disk.rootDirectory[i].DIR_Attr & 0x10)) { //如果是目录
             uint16_t cluster = disk.rootDirectory[i].DIR_FstClus;
-
-            if (clusterStack.empty()) clusterStack.push(2);
+            //把其簇入栈
             clusterStack.push(cluster);
+            now_clu = cluster;
+            if (pathStack.top() != "/") {
+                pathStack.push("/" + actual_name);
+            } else {
+                pathStack.push(actual_name);
+            }
 
-            uint16_t offset = (33 + (cluster - 2)) * SECTOR_SIZE;
-            fseek(diskFile, offset, SEEK_SET);
-            fread(disk.rootDirectory, 1, disk.MBR.BPB_RootEntCnt, diskFile);
-
-            cout << "进入目录：" << actual_name << endl;
+            //替换当前disk.rootDirctory目录为指定
+            navigator_to_specific_directory_position(cluster);
+            cout << "当前目录：" << actual_name << endl;
             return;
         }
     }
@@ -236,12 +253,16 @@ void executeCommand(string &command) {
         exit(0);
     } else if (command.substr(0, 4) == "cat ") { // 必须是 cat空格 命令开头
         cat(command); // 调用 cat 函数
+    } else if (command == "pwd") {
+        pwd();
     } else if (command.substr(0, 6) == "mkdir ") {
         mkdir(command);
     } else if (command.substr(0, 3) == "cd ") { // 必须是 cd空格 命令开头
         cd(command); // 调用 cd 函数
     } else if (command == "te") { //过程测试
         te(clusterStack);
+    } else if (command == "gc") {
+        cout << (uint32_t)getNowClu() << endl;
     } else {
         cout << "未知命令: " << command << endl;
     }
@@ -335,8 +356,8 @@ void mkdir(string &dirName) {
 
     // 填充目录项
     memset(rootEntry.DIR_Name, 0x20, sizeof(rootEntry.DIR_Name)); // 空格填充
-    strncpy(reinterpret_cast<char*>(rootEntry.DIR_Name), _name, 11);
-    rootEntry.DIR_Attr = 0x10; // 目录属性
+    strncpy(reinterpret_cast<char *>(rootEntry.DIR_Name), _name, 11);
+    rootEntry.DIR_Attr = DIRECTORY_CODE; // 目录属性
     memset(rootEntry.DIR_reserve, 0, sizeof(rootEntry.DIR_reserve));
 
     // 设置时间
@@ -360,7 +381,7 @@ void mkdir(string &dirName) {
             // 确保指针有效
 
             // 设置文件指针到根目录起始位置
-            fseek(diskFile, 19*512, SEEK_SET); // ROOT_DIR_START 是根目录在磁盘上的起始偏移量
+            fseek(diskFile, DIRECTORY_POS * 512, SEEK_SET); // ROOT_DIR_START 是根目录在磁盘上的起始偏移量
             // 写入根目录内容到磁盘
             fwrite(&rootEntry, sizeof(RootEntry), 1, diskFile);
 

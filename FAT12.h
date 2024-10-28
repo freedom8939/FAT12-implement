@@ -9,13 +9,13 @@
 #include <cstring>
 #include <iomanip>
 #include <stack>
-#include <vector>
 #include <ctime>
 
 using namespace std;
 
 #define PATH "G:\\OS-homework\\grp07\\wjyImg.vfd"
-
+FILE *diskFile = fopen(PATH, "rb");
+uint8_t now_clu = 2;
 /**
 * 定义磁盘的信息（并未引入教师的磁盘)
 */
@@ -24,6 +24,8 @@ using namespace std;
 #define ROOT_DICT_NUM 224      //根目录数
 #define DIRECTORY_CODE 0x10
 #define FAT_SECTOR_NUM 9        //FAT扇区数
+#define DIRECTORY_POS  19  //目录去开始的位置
+#define DATA_POS 33   //数据区开始的位置
 
 
 /**
@@ -32,6 +34,7 @@ using namespace std;
 typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
+
 typedef char Sector[SECTOR_SIZE];   //数据区大小
 #pragma pack(1)
 /**
@@ -229,6 +232,7 @@ unsigned short getClus(unsigned char *buffer, char flag);
 
 // 命令列表
 string command;
+
 void showCommandList() {
     cout << "可使用命令:" << endl;
     cout << "(1):dir" << endl;
@@ -240,8 +244,12 @@ void showCommandList() {
 //当前根目录是否有子文件夹(已排除.和..)
 bool hasSubdirectories();
 
-//目录栈
+//开两个栈而非扔进去一个Entry
+
+//目录栈(簇号)
 stack<uint16_t> clusterStack; // 用来存储每一层目录的簇号
+//目录栈（路径名）
+stack<string> pathStack;
 
 //做测试用
 void te(const stack<uint16_t> &clusterStack) {
@@ -273,11 +281,14 @@ void te(const stack<uint16_t> &clusterStack) {
 
 }
 
+
 //初始化FAT和MBR
 void Init() {
     read_mbr_from_vfd(PATH);
     read_fat_from_vfd(PATH);
     clusterStack.push(2); //初始化
+    pathStack.push("/");
+
 }
 
 //是否有子目录
@@ -287,7 +298,7 @@ bool hasSubdirectories() {
         if (disk.rootDirectory[i].DIR_Name[0] == 0) continue;
 
         // 检查是否是目录
-        if (disk.rootDirectory[i].DIR_Attr & 0x10) {
+        if (disk.rootDirectory[i].DIR_Attr & DIRECTORY_CODE) {
             // 排除特殊的 . 和 .. 目录
             uint8_t file_name[9];
             memcpy(file_name, disk.rootDirectory[i].DIR_Name, 8);
@@ -312,9 +323,9 @@ void setTime(RootEntry &entry);
 //分配FAT块 遍历FAT表找到空闲FAT块
 int findEmptyRootEntry() {  //1536
     for (int i = 0; i < 1536; i++) {
-        if(disk.FAT1[i].data[0] == 0x00 &&
-                disk.FAT1[i].data[1] == 0x00 &&
-                disk.FAT1[i].data[2] == 0x00){
+        if (disk.FAT1[i].data[0] == 0x00 &&
+            disk.FAT1[i].data[1] == 0x00 &&
+            disk.FAT1[i].data[2] == 0x00) {
             return i; //返回簇号
         }
     }
@@ -332,4 +343,47 @@ uint16_t allocateFATCluster() {
         }
     }
     return 0xFFFF; // 无可用簇
+}
+
+//将当前disk.rootDirectory替换为根目录（目录区）
+void go_back_to_directory_position() {
+    now_clu = 2;
+    uint16_t offset = DIRECTORY_POS * SECTOR_SIZE;
+    fseek(diskFile, offset, SEEK_SET);
+    fread(disk.rootDirectory, 1, disk.MBR.BPB_RootEntCnt, diskFile);
+    cout << "已回到根目录" << endl;
+}
+
+//将当前disk.rootDIrctory替换为指定目录(数据区)
+void navigator_to_specific_directory_position(uint8_t cluster_num) {
+    uint16_t offset = (DATA_POS + (cluster_num - 2)) * SECTOR_SIZE;
+    fseek(diskFile, offset, SEEK_SET);
+    fread(disk.rootDirectory, 1, disk.MBR.BPB_RootEntCnt, diskFile);
+    now_clu = cluster_num;
+}
+
+//pwd
+void pwd() {
+    std::stack<std::string> tempStack = pathStack;
+    std::string path;
+    cout << "current path is: ";
+
+    // 从栈底到栈顶拼接路径
+    std::stack<std::string> reverseStack;
+    while (!tempStack.empty()) {
+        reverseStack.push(tempStack.top());
+        tempStack.pop();
+    }
+
+    // 直接拼接路径，不添加分隔符
+    while (!reverseStack.empty()) {
+        path += reverseStack.top();
+        reverseStack.pop();
+    }
+
+    std::cout << path << std::endl;
+}
+
+uint32_t getNowClu() {
+    return now_clu;
 }

@@ -41,7 +41,7 @@ void dir() {
          * 2023/07/26  18:30    <DIR>          IdeaSnapshots
             2024/06/30  18:02           258,682 java_error_in_clion64_2720.log
          */
-        bool isDirectory = (disk.rootDirectory[i].DIR_Attr & 0x10) != 0;
+        bool isDirectory = (disk.rootDirectory[i].DIR_Attr & DIRECTORY_CODE) != 0;
         if (isDirectory) {
             cout << year << "/" << month << "/" << day << setw(7) << hours << ":" << minutes << setw(10) << "<dir>"
                  << setw(20) << fileName << endl;
