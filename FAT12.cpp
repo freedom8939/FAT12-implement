@@ -2,8 +2,6 @@
 #include "dir.h"
 
 Disk disk;
-RootEntry root;
-
 
 /**
  * 读取镜像的FAT到本地磁盘
@@ -88,6 +86,7 @@ RootEntry *findFile(string &fileName) {
  */
 unsigned short getClus(unsigned char *buffer, char flag) {
     uint16_t ans = 0;
+
     if (!flag) {
         ans += buffer[0];
         ans += (buffer[1] << 8) & 0xFFF; // 只取低12位
@@ -152,7 +151,6 @@ void readFileData(uint16_t firstCluster, uint32_t fileSize) {
  * 进入文件夹
  * @param _name
  */
-
 void cd(string &_name) {
     string fileFullName = _name.substr(3); // 从 "cd " 后开始
     toLowerCase(fileFullName);
@@ -190,18 +188,17 @@ void cd(string &_name) {
 
         /**
          *
-         *
-         * 9 == 9 所以 这个9出栈 然后返回簇为8 并且 更新 now_clus =8
-         * 8 == 8 所以 这个8出栈  然后返回簇为6 更新now_clus = 6
-         * 6 == 6  6出栈 返回2 now_clus =2
-         * 2 == 2 拦截器
+               9出栈 然后返回簇为8 并且 更新 now_clus =8
+              8出栈  然后返回簇为6 更新now_clus = 6
+             6出栈 返回2 now_clus =2
+           2 == 2 拦截
          */
 
         string tempPathName = pathStack.top(); //栈顶路径
         clusterStack.pop();
         pathStack.pop();
         now_clu = clusterStack.top();
-        if(now_clu == 2){
+        if (now_clu == 2) {
             go_back_to_directory_position();
             return;
         }
@@ -262,7 +259,7 @@ void executeCommand(string &command) {
     } else if (command == "te") { //过程测试
         te(clusterStack);
     } else if (command == "gc") {
-        cout << (uint32_t)getNowClu() << endl;
+        cout << (uint32_t) getNowClu() << endl;
     } else {
         cout << "未知命令: " << command << endl;
     }
@@ -288,7 +285,10 @@ void cat(string &_name) {
     }
 }
 
-
+/**
+ * 设置Entru的时间
+ * @param entry
+ */
 void setTime(RootEntry &entry) {
     time_t currentTime = time(NULL);
     tm *localTime = localtime(&currentTime);
@@ -308,94 +308,72 @@ void setTime(RootEntry &entry) {
     entry.DIR_WrtDate[1] = (lastWriteDate >> 8) & 0xFF;    // 高字节
     entry.DIR_WrtTime[0] = lastWriteTime & 0xFF;           // 低字节
     entry.DIR_WrtTime[1] = (lastWriteTime >> 8) & 0xFF;    // 高字节
+//    parseTime(entry);
 }
 
-void printRootEntry(const RootEntry &entry) {
-    // 打印文件名
-    cout << "文件名: ";
-    for (int i = 0; i < 11; ++i) {
-        cout << entry.DIR_Name[i];
-    }
-    cout << endl;
-    // 打印文件属性
-    cout << "文件属性: 0x" << hex << setw(2) << setfill('0') << static_cast<int>(entry.DIR_Attr) << endl;
-
-    // 打印保留位
-    cout << "保留位: ";
-    for (int i = 0; i < 10; ++i) {
-        cout << "0x" << hex << setw(2) << setfill('0') << static_cast<int>(entry.DIR_reserve[i]) << " ";
-    }
-    cout << endl;
-
-    // 打印最后一次写入时间
-    cout << "最后一次写入时间: "
-         << static_cast<int>(entry.DIR_WrtTime[0]) << ":"
-         << static_cast<int>(entry.DIR_WrtTime[1]) << endl;
-
-    // 打印最后一次写入日期
-    cout << "最后一次写入日期: "
-         << static_cast<int>(entry.DIR_WrtDate[0]) << "-"
-         << static_cast<int>(entry.DIR_WrtDate[1]) << endl;
-
-    // 打印文件开始的簇号
-    cout << "文件开始的簇号: " << entry.DIR_FstClus << endl;
-
-    // 打印文件大小
-    cout << "文件大小: " << entry.DIR_FileSize << " 字节" << endl;
-}
-
-//文件夹名字
-void mkdir(string &dirName) {
+/*
+ * 创建文件夹
+ * @param dirName
+ */
+void mkdir(string &dirName)  {
     RootEntry rootEntry;
-    string fileFullName = dirName.substr(5);
-
-    // 处理文件名
-    char _name[11] = "";
+    // 1.处理文件名
+    string fileFullName = dirName.substr(6);
+    char _name[12] = "";
+    memset(rootEntry.DIR_Name, 0x20, sizeof(rootEntry.DIR_Name));
     strncpy(_name, fileFullName.c_str(), 11);
     _name[11] = '\0';
+    memcpy(rootEntry.DIR_Name, _name, strlen(_name)); // 这里用 memcpy 复制字符
 
-    // 填充目录项
-    memset(rootEntry.DIR_Name, 0x20, sizeof(rootEntry.DIR_Name)); // 空格填充
-    strncpy(reinterpret_cast<char *>(rootEntry.DIR_Name), _name, 11);
-    rootEntry.DIR_Attr = DIRECTORY_CODE; // 目录属性
+    //2.填充文件属性
+    rootEntry.DIR_Attr = DIRECTORY_CODE; // 文件属性
+    //3.文件10个保留位
     memset(rootEntry.DIR_reserve, 0, sizeof(rootEntry.DIR_reserve));
-
-    // 设置时间
+    //4.设置时间
     setTime(rootEntry);
-    rootEntry.DIR_FileSize = 512; // 初始大小
+    //5.文件大小设置为0
+    rootEntry.DIR_FileSize = 0x00; // 初始大小
 
-    uint16_t cluster_num_allocated = allocateFATCluster();
-    if (cluster_num_allocated == 0xFFFF) {
-        cout << "所有簇都被分配了" << endl;
+    //6.分配簇号
+    uint16_t clus_num = getFreeClusNum();
+    if(clus_num == 0xFFF){
+        cout << "没有可分配的簇号" << endl;
         return;
     }
-    rootEntry.DIR_FstClus = cluster_num_allocated;
 
-    // 更新根目录
-    for (int i = 0; i < 1536; ++i) {
-        if (disk.rootDirectory[i].DIR_Name[0] == 0x00) { // 找到空闲目录项
-            disk.rootDirectory[i] = rootEntry; // 更新内存中的根目录
-            cout << "目录创建成功, 簇号是: " << cluster_num_allocated << endl;
 
-            // 写入更新到磁盘
-            // 确保指针有效
+    cout << "位置是" << (1+9+9+14-2+clus_num) * 512 << endl;
+    cout << "分配的簇号是" << clus_num <<endl;
 
-            // 设置文件指针到根目录起始位置
-            fseek(diskFile, DIRECTORY_POS * 512, SEEK_SET); // ROOT_DIR_START 是根目录在磁盘上的起始偏移量
-            // 写入根目录内容到磁盘
-            fwrite(&rootEntry, sizeof(RootEntry), 1, diskFile);
+    rootEntry.DIR_FstClus = clus_num;
 
-            return;
-        }
-    }
+    //7.创建.目录
+    RootEntry dot,dotdot;
 
-    cout << "根目录已满，无法添加新目录。" << endl;
+    createDotDirectory(&dot,clus_num);
+    createDotDotDirectory(&dotdot);
+//    cout << "分配的簇号是" << clus_num << endl; // 19号簇是空的我们创建RootEntry和.以及..并且放进去
+    writeRootEntry(clus_num,dot,0);
+    writeRootEntry(clus_num,dotdot,1);
+
+    uint16_t nextClus = getFreeClusNum();
+    rootEntry.DIR_FstClus = nextClus;
+//    setClus(nextClus, 0xFFF);
+    //先分配一个扇区
+    rootEntry.DIR_FileSize = SECTOR_SIZE;
+    writeRootEntry(clus_num,rootEntry,2);
+
+
+    //write_to_directory_root
+    write_to_directory_root(rootEntry);
+    cout << "写入成功" << endl;
+    fflush(diskFile);
 }
-
 
 int main() {
     showCommandList();
     Init();
+
     while (true) {
         cout << "A>:";
         getline(cin, command);

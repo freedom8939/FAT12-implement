@@ -13,8 +13,8 @@
 
 using namespace std;
 
-#define PATH "G:\\OS-homework\\grp07\\wjyImg.vfd"
-FILE *diskFile = fopen(PATH, "rb");
+#define PATH "./wjyImg.vfd"
+FILE *diskFile = fopen(PATH, "rb+");
 uint8_t now_clu = 2;
 /**
 * 定义磁盘的信息（并未引入教师的磁盘)
@@ -26,7 +26,7 @@ uint8_t now_clu = 2;
 #define FAT_SECTOR_NUM 9        //FAT扇区数
 #define DIRECTORY_POS  19  //目录去开始的位置
 #define DATA_POS 33   //数据区开始的位置
-
+#define FAT_SIZE 4608   //FAT区的总字节大小
 
 /**
 * 定义数据类型
@@ -110,7 +110,7 @@ typedef struct RootEntry {
  */
 struct Disk {
     MBRHeader MBR;  //1个扇区
-    FATEntry FAT1[1536];     //9个扇区 全部表示出来的
+    FATEntry FAT1[1536];     // 9个扇区 全部表示出来的
     FATEntry FAT2[1536];     // copy fat1
     RootEntry rootDirectory[ROOT_DICT_NUM];   //根目录区
     Sector dataSector[DATA_SECTOR_NUM]; //2880个扇区
@@ -197,7 +197,6 @@ void InitFAT() {
 //从VFD中读出mbr
 void read_mbr_from_vfd(char *vfd_file);
 
-
 //进入文件夹命令
 void cd(string &_name);
 
@@ -216,7 +215,6 @@ void readFileData(uint16_t firstCluster, uint32_t fileSize);
 
 //根目录下查找文件FATEntry
 RootEntry *findFile(const string &fileName);
-
 
 //执行命令
 void executeCommand(string &command);
@@ -238,6 +236,7 @@ void showCommandList() {
     cout << "(1):dir" << endl;
     cout << "(2):cat 文件名" << endl;
     cout << "(3):cd 文件夹" << endl;
+    cout << "(4):pwd" << endl;
     cout << "(0):exit" << endl;
 }
 
@@ -245,7 +244,6 @@ void showCommandList() {
 bool hasSubdirectories();
 
 //开两个栈而非扔进去一个Entry
-
 //目录栈(簇号)
 stack<uint16_t> clusterStack; // 用来存储每一层目录的簇号
 //目录栈（路径名）
@@ -281,7 +279,6 @@ void te(const stack<uint16_t> &clusterStack) {
 
 }
 
-
 //初始化FAT和MBR
 void Init() {
     read_mbr_from_vfd(PATH);
@@ -289,6 +286,11 @@ void Init() {
     clusterStack.push(2); //初始化
     pathStack.push("/");
 
+}
+
+//获取当前所在簇号
+uint32_t getNowClu() {
+    return now_clu;
 }
 
 //是否有子目录
@@ -320,30 +322,105 @@ void mkdir(string &dirName);
 //设置wrTime时间等
 void setTime(RootEntry &entry);
 
-//分配FAT块 遍历FAT表找到空闲FAT块
-int findEmptyRootEntry() {  //1536
-    for (int i = 0; i < 1536; i++) {
-        if (disk.FAT1[i].data[0] == 0x00 &&
-            disk.FAT1[i].data[1] == 0x00 &&
-            disk.FAT1[i].data[2] == 0x00) {
-            return i; //返回簇号
-        }
+
+//写入FAT表
+void setClus(uint16_t clusNum, bool isOdd) {
+    uint8_t *buffer = &disk.FAT1[clusNum].data[0]; // 获取 FATEntry 的起始地址
+
+    if (!isOdd) { // 偶数
+        buffer[0] = 0x00; // 将 buffer[0] 清零，确保没有残留数据
+        buffer[0] = clusNum & 0xFF; // 写入低 8 位
+        buffer[1] = (buffer[1] & 0xF0) | ((clusNum >> 8) & 0x0F); // 写入高 4 位，保留高 4 位
+    } else { // 奇数
+        buffer[1] = (buffer[1] & 0x0F) | ((clusNum << 4) & 0xF0); // 写入低 4 位
+        buffer[2] = (clusNum >> 4) & 0xFF; // 写入高 8 位
     }
-    return -1;
 }
 
-//分配可用簇
-uint16_t allocateFATCluster() {
-    for (uint16_t i = 2; i < DATA_SECTOR_NUM; i++) { // 从簇号2开始查找
-        unsigned short clusterStatus = getClus(&disk.FAT1[i / 2].data[i % 2], i % 2);
-        if (clusterStatus == 0x000) { // 找到空闲的簇
-            // 将该簇标记为已分配
-            disk.FAT1[i / 2].data[i % 2] = 0xFFF;
-            return i;
+
+//获取空闲的簇号
+uint16_t getFreeClusNum() {
+    for (uint8_t i = 2; i < 1536; i++) {
+        uint16_t freeClusNum = getClus(&disk.FAT1[i / 2].data[i % 2], i % 2);
+        if (freeClusNum == 0) { // freeClusNum 空闲簇
+            return i; // 返回空闲簇号
         }
     }
-    return 0xFFFF; // 无可用簇
+    return 0xFFF; // 没有空闲簇
 }
+
+
+
+//创建dot目录项
+void createDotDirectory(RootEntry *dotEntry, uint8_t cur_clu_num) {
+    memcpy(dotEntry, &disk.rootDirectory, sizeof(RootEntry));
+
+    memset(dotEntry->DIR_Name, 0x20, sizeof(dotEntry->DIR_Name));
+    memset(dotEntry->DIR_Name, 0x2E, 1);
+
+    dotEntry->DIR_FstClus = cur_clu_num;
+    dotEntry->DIR_Attr = DIRECTORY_CODE;
+
+    memset(dotEntry->DIR_reserve, 0x00, 10);
+    dotEntry->DIR_FileSize = 0;
+}
+
+//创建..目录项
+void createDotDotDirectory(RootEntry *dotdotENtry) {
+
+    memset(dotdotENtry->DIR_Name, 0x20, sizeof(dotdotENtry->DIR_Name));
+    dotdotENtry->DIR_Name[0] = '.';
+    dotdotENtry->DIR_Name[1] = '.';
+    dotdotENtry->DIR_Name[2] = '0';
+
+
+    dotdotENtry->DIR_Attr = DIRECTORY_CODE;
+    memset(dotdotENtry->DIR_reserve, 0x00, 10);
+    setTime(*dotdotENtry);
+    dotdotENtry->DIR_FileSize = 0;
+    dotdotENtry->DIR_FstClus = 0; // ddot的FstClus字段为父目录FstClus，若父目录为根目录，则设置为0
+}
+
+//mkdir时写入数据区
+void writeRootEntry(uint16_t clus_num, RootEntry &entry, uint8_t flag) {
+    uint8_t ENTRY_SIZE = 32;
+    uint32_t entryOffset = (31 + clus_num) * 512;
+    if (flag == 0) {
+        entryOffset = (31 + clus_num) * 512;
+    } else if (flag == 1) {
+        entryOffset = (31 + clus_num) * 512 + 32;
+    } else {
+        entryOffset = (31 + clus_num) * 512 + 64;
+    }
+    fseek(diskFile, entryOffset, SEEK_SET);
+    // 将 rootEntry 写入 VFD 文件
+    if (fwrite(&entry, ENTRY_SIZE, 1, diskFile) != 1) {
+        cerr << "写入失败，请检查磁盘文件状态和权限rb+" << endl;
+    }
+}
+
+void write_to_directory_root(RootEntry &rootEntry) {
+    const uint32_t ROOT_DIRECTORY_OFFSET = 19 * 512; // 根目录起始偏移量
+    const uint16_t ROOT_ENTRIES = 224;               // 根目录条目数
+    const uint16_t ENTRY_SIZE = 32;                  // 每个RootEntry条目大小
+
+    for (uint16_t i = 0; i < ROOT_ENTRIES; i++) {
+        uint32_t entryOffset = ROOT_DIRECTORY_OFFSET + i * ENTRY_SIZE;
+        // 定位到当前RootEntry条目
+        fseek(diskFile, entryOffset, SEEK_SET);
+        RootEntry tempEntry;
+        fread(&tempEntry, ENTRY_SIZE, 1, diskFile);
+        // 找到空闲条目
+        if (tempEntry.DIR_Name[0] == 0x00) {
+            // 回到空闲条目位置
+            fseek(diskFile, entryOffset, SEEK_SET);
+            fwrite(&rootEntry, ENTRY_SIZE, 1, diskFile);
+            return;
+        }
+    }
+    cout << "根目录已满，无法写入新的条目" << endl;
+}
+
 
 //将当前disk.rootDirectory替换为根目录（目录区）
 void go_back_to_directory_position() {
@@ -364,26 +441,34 @@ void navigator_to_specific_directory_position(uint8_t cluster_num) {
 
 //pwd
 void pwd() {
-    std::stack<std::string> tempStack = pathStack;
-    std::string path;
-    cout << "current path is: ";
-
+    stack<string> tempStack = pathStack;
+    string path;
     // 从栈底到栈顶拼接路径
-    std::stack<std::string> reverseStack;
+    stack<string> reverseStack;
     while (!tempStack.empty()) {
         reverseStack.push(tempStack.top());
         tempStack.pop();
     }
-
     // 直接拼接路径，不添加分隔符
     while (!reverseStack.empty()) {
         path += reverseStack.top();
         reverseStack.pop();
     }
-
-    std::cout << path << std::endl;
+    cout << path << endl;
 }
 
-uint32_t getNowClu() {
-    return now_clu;
+//解析时间
+void parseTime(RootEntry entry) {
+    //解析
+    uint16_t lastWriteTime = (entry.DIR_WrtTime[1] << 8) | entry.DIR_WrtTime[0];
+    uint16_t lastWriteDate = (entry.DIR_WrtDate[1] << 8) | entry.DIR_WrtDate[0];
+    // 解析最后一次写入时间
+    int hours = (lastWriteTime >> 11) & 0x1F; // 获取小时
+    int minutes = (lastWriteTime >> 5) & 0x3F; // 获取分钟
+    // 解析最后一次写入日期
+    int year = ((lastWriteDate >> 9) & 0x7F) + 1980; // 获取年份
+    int month = (lastWriteDate >> 5) & 0x0F; // 获取月份
+    int day = lastWriteDate & 0x1F; // 获取日期
+    cout << year << "/" << month << "/" << day << "," << hours << ":" << minutes << endl;
 }
+
