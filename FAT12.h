@@ -322,20 +322,18 @@ void mkdir(string &dirName);
 //设置wrTime时间等
 void setTime(RootEntry &entry);
 
-
 //写入FAT表 ,
 void setClus(uint16_t clusNum) {
-    uint16_t fatIndex = clusNum / 2; // 簇号对应的FAT表项索引
-    uint8_t *entry = disk.FAT1[fatIndex].data; // 对应FAT表项的字节地址
+    uint8_t *entry = &disk.FAT1[clusNum / 2].data[clusNum % 2];  // 对应FAT表项的字节地址
 
-    if (clusNum % 2 == 0) {
+    if (!(clusNum % 2)) {
         // 偶数簇号：第一个簇的低12位
-        entry[0] = clusNum & 0xFF; // 低8位
-        entry[1] = (entry[1] & 0xF0) | ((clusNum >> 8) & 0x0F); // 高4位
+        entry[0] = clusNum & 0xFF;                // 低8位
+        entry[1] = (entry[1] & 0xF0) | ((clusNum >> 8) & 0x0F);  // 高4位
     } else {
         // 奇数簇号：第二个簇的高12位
-        entry[0] = (entry[0] & 0x0F) | ((clusNum & 0x0F) << 4); // 低4位
-        entry[1] = (clusNum >> 4) & 0xFF; // 高8位
+        entry[0] = (entry[0] & 0x0F) | ((clusNum << 4) & 0xF0);  // 低4位
+        entry[1] = (clusNum >> 4) & 0xFF;         // 高8位
     }
 
     fseek(diskFile, 512, SEEK_SET); // 移动到文件开头
@@ -347,19 +345,17 @@ void setClus(uint16_t clusNum) {
 
 }
 
-
-
 //获取空闲的簇号
 uint16_t getFreeClusNum() {
     for (uint8_t i = 2; i < 1536; i++) {
         uint16_t freeClusNum = getClus(&disk.FAT1[i / 2].data[i % 2], i % 2);
         if (freeClusNum == 0) { // freeClusNum 空闲簇
+
             return i; // 返回空闲簇号
         }
     }
     return 0xFFF; // 没有空闲簇
 }
-
 
 //创建dot目录项
 void createDotDirectory(RootEntry *dotEntry, uint8_t cur_clu_num) {
@@ -410,6 +406,7 @@ void writeRootEntry(uint16_t clus_num, RootEntry &entry, uint8_t flag) {
     }
 }
 
+//写到根目录
 void write_to_directory_root(RootEntry &rootEntry) {
     const uint32_t ROOT_DIRECTORY_OFFSET = 19 * 512; // 根目录起始偏移量
     const uint16_t ROOT_ENTRIES = 224;               // 根目录条目数
@@ -431,7 +428,6 @@ void write_to_directory_root(RootEntry &rootEntry) {
     }
     cout << "根目录已满，无法写入新的条目" << endl;
 }
-
 
 //将当前disk.rootDirectory替换为根目录（目录区）
 void go_back_to_directory_position() {
@@ -483,3 +479,84 @@ void parseTime(RootEntry entry) {
     cout << year << "/" << month << "/" << day << "," << hours << ":" << minutes << endl;
 }
 
+//touch命令中的设置名称11位部分抽离到这里
+void setDirName(RootEntry &rootEntry,string str){
+    //1.处理文件名
+    string fileName = str.substr(6);
+    uint8_t len = fileName.length();
+    if (len > 11 || len < 2) {   // 超过11字符或小于2字符
+        cerr << "文件名过长或太短" << endl;
+        return;
+    }
+    // 找到文件名和扩展名的分隔点
+    uint16_t dotPosition = fileName.find('.');
+
+    memset(rootEntry.DIR_Name, 0x20, sizeof(rootEntry.DIR_Name));  // 将DIR_Name初始化为空格填充
+    // 分离文件名和扩展名
+    string baseName = (dotPosition == string::npos) ? fileName : fileName.substr(0, dotPosition);
+    string extension = (dotPosition == string::npos) ? "" : fileName.substr(dotPosition + 1);
+    // 检查文件名和扩展名的长度限制
+    if (baseName.length() > 8) {
+        cerr << "文件名过长，最多8字符" << endl;
+        return;
+    }
+    if (extension.length() > 3) {
+        cerr << "扩展名过长，最多3字符" << endl;
+        return;
+    }
+    // 将文件名和扩展名拷贝到 rootEntry.DIR_Name 中，空白位置自动用空格填充
+    memcpy(rootEntry.DIR_Name, baseName.c_str(), baseName.length());
+    memcpy(rootEntry.DIR_Name + 8, extension.c_str(), extension.length());
+
+}
+
+//touch命令
+void touch(string str){
+    RootEntry rootEntry;
+    //1.设置文件名称
+    setDirName(rootEntry,str);
+
+    //2.设置文件属性
+    rootEntry.DIR_Attr = 0x00;
+
+    //3.10个保留位
+    memset(rootEntry.DIR_reserve, 0, sizeof(rootEntry.DIR_reserve));
+
+    //4.设置时间
+    setTime(rootEntry);
+
+    //5.分配簇号
+    uint16_t clus_num = getFreeClusNum();
+    if (clus_num == 0xFFF) {
+        cout << "没有可分配的簇号" << endl;
+    }
+    setClus(clus_num);
+    rootEntry.DIR_FstClus = clus_num;
+
+    //6.文件大小设置 TODO 稍后设定  需要根据读取区域的大小来分配几个扇区
+    //6.1开辟并且清空缓冲区
+    char buffer[512];  // 创建512字节的缓冲区
+    memset(buffer, 0, sizeof(buffer));
+    //6.2输入内容
+    cout << "请输入想要存入的内容:" ;
+    cin.getline(buffer,sizeof(buffer));
+    //6.3设置好文件的大小
+    rootEntry.DIR_FileSize = strlen(buffer);
+    cout << "输入的文件大小为：" << rootEntry.DIR_FileSize << " 字节" << std::endl;
+
+    //6.4写道数据区得到簇 然后把他写进数据区即可了 不是有簇号吗
+    uint32_t offset = (31 + clus_num) * 512;
+    fseek(diskFile, offset, SEEK_SET);
+    fwrite(buffer, sizeof(char), rootEntry.DIR_FileSize, diskFile); // 写入文件内容
+
+
+    //7.先写到根目录 后期在todo修改
+    cout << "写入文件成功" << endl;
+    write_to_directory_root(rootEntry);
+
+    //8.重新读取fat表项
+    read_fat_from_vfd(PATH);
+    read_mbr_from_vfd(PATH);
+    fflush(diskFile);
+
+}

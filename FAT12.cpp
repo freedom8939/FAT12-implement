@@ -256,9 +256,11 @@ void executeCommand(string &command) {
         mkdir(command);
     } else if (command.substr(0, 3) == "cd ") { // 必须是 cd空格 命令开头
         cd(command); // 调用 cd 函数
-    } else if (command == "te") { //过程测试
+    } else if (command == "te") { //过程测试（目录测试）
         te(clusterStack);
-    } else if (command == "gc") {
+    } else if (command.substr(0, 6) == "touch ") {
+        touch(command);
+    } else if (command == "gc") { //当前所处的簇号
         cout << (uint32_t) getNowClu() << endl;
     } else {
         cout << "未知命令: " << command << endl;
@@ -315,7 +317,7 @@ void setTime(RootEntry &entry) {
  * 创建文件夹
  * @param dirName
  */
-void mkdir(string &dirName)  {
+void mkdir(string &dirName) {
     RootEntry rootEntry;
     // 1.处理文件名
     string fileFullName = dirName.substr(6);
@@ -336,29 +338,28 @@ void mkdir(string &dirName)  {
 
     //6.分配簇号
     uint16_t clus_num = getFreeClusNum();
-    if(clus_num == 0xFFF){
+    if (clus_num == 0xFFF) {
         cout << "没有可分配的簇号" << endl;
     }
 
     setClus(clus_num);
 
-    cout << "起始位置是" << (1+9+9+14-2+clus_num) * 512 << endl;
-    cout << "分配的簇号是" << clus_num <<endl;
+    cout << "起始位置是" << (1 + 9 + 9 + 14 - 2 + clus_num) * 512 << endl;
+    cout << "分配的簇号是" << clus_num << endl;
     rootEntry.DIR_FstClus = clus_num;
 
 
     //7.创建.目录和..目录
-    RootEntry dot,dotdot;
-    createDotDirectory(&dot,clus_num);
+    RootEntry dot, dotdot;
+    createDotDirectory(&dot, clus_num);
     createDotDotDirectory(&dotdot);
 
     //把.和..写进vfd磁盘
-    writeRootEntry(clus_num,dot,0);
-    writeRootEntry(clus_num,dotdot,1);
+    writeRootEntry(clus_num, dot, 0);
+    writeRootEntry(clus_num, dotdot, 1);
 
 
-    rootEntry.DIR_FileSize = SECTOR_SIZE;
-    //这个是添加到根目录的!不出现在这里调试！
+    //这个是添加到根目录的!不出现在这里调    rootEntry.DIR_FileSize = SECTOR_SIZE;试！
 //    writeRootEntry(clus_num,rootEntry,2);
 
     //write_to_directory_root
@@ -373,6 +374,9 @@ void mkdir(string &dirName)  {
 int main() {
     showCommandList();
     Init();
+    uint16_t i = getFreeClusNum();
+    cout << "空闲的簇是" << i  << endl;
+    cout << "他的FAT表项是" <<( i / 2 )<< endl;
     while (true) {
         cout << "A>:";
         getline(cin, command);
