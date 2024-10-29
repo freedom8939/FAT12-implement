@@ -2,10 +2,10 @@
 void dir() {
     for (int i = 0; i < disk.MBR.BPB_RootEntCnt; i++) {
         if (disk.rootDirectory[i].DIR_Name[0] == 0) {
-            continue; // Á©∫Êù°ÁõÆÔºåË∑≥Ëøá
+            continue; // ø’Ãıƒø£¨Ã¯π˝
         }
 
-        // Ëé∑ÂèñÊñá‰ª∂Â§ßÂ∞è
+        // ªÒ»°Œƒº˛¥Û–°
         uint32_t fileSize = disk.rootDirectory[i].DIR_FileSize;
 
         char name[9] = "";
@@ -16,28 +16,28 @@ void dir() {
 
         string fileName = name;
         string extension = ext;
-        //ÂéªÊéâÁ©∫Ê†º
+        //»•µÙø’∏Ò
         fileName = fileName.substr(0, fileName.find_last_not_of(' ') + 1);
         extension = extension.substr(0, fileName.find_last_not_of(' ') + 1);
-        //ËøõË°å‰∏éÊìç‰Ωú
+        //Ω¯––”Î≤Ÿ◊˜
         /*
          * hex   0001 0000               0010 0000
          *     & 0001 0000             & 0001 0000
-         *       0001 0000 ÊâÄ‰ª•ÊòØÁõÆÂΩï      0000 0000 Á≠â‰∫é0ËØ¥ÊòéËÇØÂÆö‰∏çÊòØÁõÆÂΩï Â∫îËØ•ÊòØÊôÆÈÄöÊñá‰ª∂ÊâÄ‰ª•‰∏çÂÅöÊìç‰Ωú
+         *       0001 0000 À˘“‘ «ƒø¬º      0000 0000 µ»”⁄0Àµ√˜øœ∂®≤ª «ƒø¬º ”¶∏√ «∆’Õ®Œƒº˛À˘“‘≤ª◊ˆ≤Ÿ◊˜
          */
-        // Ëé∑ÂèñÊúÄÂêé‰∏ÄÊ¨°ÂÜôÂÖ•Êó∂Èó¥ÂíåÊó•Êúü (ÁªÑÊàê16‰Ωç)
+        // ªÒ»°◊Ó∫Û“ª¥Œ–¥»Î ±º‰∫Õ»’∆⁄ (◊È≥…16Œª)
         uint16_t lastWriteTime = (disk.rootDirectory[i].DIR_WrtTime[1] << 8) | disk.rootDirectory[i].DIR_WrtTime[0];
         uint16_t lastWriteDate = (disk.rootDirectory[i].DIR_WrtDate[1] << 8) | disk.rootDirectory[i].DIR_WrtDate[0];
 //
-//        // Ëß£ÊûêÊúÄÂêé‰∏ÄÊ¨°ÂÜôÂÖ•Êó∂Èó¥
-        int hours = (lastWriteTime >> 11) & 0x1F; // Ëé∑ÂèñÂ∞èÊó∂
-        int minutes = (lastWriteTime >> 5) & 0x3F; // Ëé∑ÂèñÂàÜÈíü
-//        // Ëß£ÊûêÊúÄÂêé‰∏ÄÊ¨°ÂÜôÂÖ•Êó•Êúü
-        int year = ((lastWriteDate >> 9) & 0x7F) + 1980; // Ëé∑ÂèñÂπ¥‰ªΩ
-        int month = (lastWriteDate >> 5) & 0x0F; // Ëé∑ÂèñÊúà‰ªΩ
-        int day = lastWriteDate & 0x1F; // Ëé∑ÂèñÊó•Êúü
+//        // Ω‚Œˆ◊Ó∫Û“ª¥Œ–¥»Î ±º‰
+        int hours = (lastWriteTime >> 11) & 0x1F; // ªÒ»°–° ±
+        int minutes = (lastWriteTime >> 5) & 0x3F; // ªÒ»°∑÷÷”
+//        // Ω‚Œˆ◊Ó∫Û“ª¥Œ–¥»Î»’∆⁄
+        int year = ((lastWriteDate >> 9) & 0x7F) + 1980; // ªÒ»°ƒÍ∑›
+        int month = (lastWriteDate >> 5) & 0x0F; // ªÒ»°‘¬∑›
+        int day = lastWriteDate & 0x1F; // ªÒ»°»’∆⁄
         /*
-         *  dirÊ†ºÂºè
+         *  dir∏Ò Ω
          * 2023/07/26  18:30    <DIR>          IdeaSnapshots
             2024/06/30  18:02           258,682 java_error_in_clion64_2720.log
          */

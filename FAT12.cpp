@@ -338,13 +338,14 @@ void mkdir(string &dirName)  {
     uint16_t clus_num = getFreeClusNum();
     if(clus_num == 0xFFF){
         cout << "没有可分配的簇号" << endl;
-        return;
     }
+
     setClus(clus_num);
 
     cout << "起始位置是" << (1+9+9+14-2+clus_num) * 512 << endl;
     cout << "分配的簇号是" << clus_num <<endl;
     rootEntry.DIR_FstClus = clus_num;
+
 
     //7.创建.目录和..目录
     RootEntry dot,dotdot;
@@ -357,7 +358,7 @@ void mkdir(string &dirName)  {
 
 
     rootEntry.DIR_FileSize = SECTOR_SIZE;
-    //这个是添加到根目录的！！干嘛出现这里
+    //这个是添加到根目录的!不出现在这里调试！
 //    writeRootEntry(clus_num,rootEntry,2);
 
     //write_to_directory_root
@@ -372,9 +373,6 @@ void mkdir(string &dirName)  {
 int main() {
     showCommandList();
     Init();
-//    uint16_t i = getFreeClusNum();
-//    cout << "空闲的簇号是" << i << endl;
-//    cout << "所在FAT[" << i / 2 << "]"<<endl;
     while (true) {
         cout << "A>:";
         getline(cin, command);
