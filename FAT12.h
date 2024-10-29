@@ -323,19 +323,30 @@ void mkdir(string &dirName);
 void setTime(RootEntry &entry);
 
 
-//写入FAT表
-void setClus(uint16_t clusNum, bool isOdd) {
-    uint8_t *buffer = &disk.FAT1[clusNum].data[0]; // 获取 FATEntry 的起始地址
+//写入FAT表 ,
+void setClus(uint16_t clusNum) {
+    uint16_t fatIndex = clusNum / 2; // 簇号对应的FAT表项索引
+    uint8_t *entry = disk.FAT1[fatIndex].data; // 对应FAT表项的字节地址
 
-    if (!isOdd) { // 偶数
-        buffer[0] = 0x00; // 将 buffer[0] 清零，确保没有残留数据
-        buffer[0] = clusNum & 0xFF; // 写入低 8 位
-        buffer[1] = (buffer[1] & 0xF0) | ((clusNum >> 8) & 0x0F); // 写入高 4 位，保留高 4 位
-    } else { // 奇数
-        buffer[1] = (buffer[1] & 0x0F) | ((clusNum << 4) & 0xF0); // 写入低 4 位
-        buffer[2] = (clusNum >> 4) & 0xFF; // 写入高 8 位
+    if (clusNum % 2 == 0) {
+        // 偶数簇号：第一个簇的低12位
+        entry[0] = clusNum & 0xFF; // 低8位
+        entry[1] = (entry[1] & 0xF0) | ((clusNum >> 8) & 0x0F); // 高4位
+    } else {
+        // 奇数簇号：第二个簇的高12位
+        entry[0] = (entry[0] & 0x0F) | ((clusNum & 0x0F) << 4); // 低4位
+        entry[1] = (clusNum >> 4) & 0xFF; // 高8位
     }
+
+    fseek(diskFile, 512, SEEK_SET); // 移动到文件开头
+    fwrite(disk.FAT1, sizeof(disk.FAT1), 1, diskFile); // 写入 FAT1
+
+    // 假设 FAT2 紧接在 FAT1 后面
+    fseek(diskFile, 10 * 512 , SEEK_SET); // 移动到 FAT2 的位置
+    fwrite(disk.FAT2, sizeof(disk.FAT2), 1, diskFile); // 写入 FAT2
+
 }
+
 
 
 //获取空闲的簇号
@@ -348,7 +359,6 @@ uint16_t getFreeClusNum() {
     }
     return 0xFFF; // 没有空闲簇
 }
-
 
 
 //创建dot目录项
@@ -371,14 +381,15 @@ void createDotDotDirectory(RootEntry *dotdotENtry) {
     memset(dotdotENtry->DIR_Name, 0x20, sizeof(dotdotENtry->DIR_Name));
     dotdotENtry->DIR_Name[0] = '.';
     dotdotENtry->DIR_Name[1] = '.';
-    dotdotENtry->DIR_Name[2] = '0';
+    dotdotENtry->DIR_Name[2] = 0x20;
 
 
     dotdotENtry->DIR_Attr = DIRECTORY_CODE;
     memset(dotdotENtry->DIR_reserve, 0x00, 10);
     setTime(*dotdotENtry);
     dotdotENtry->DIR_FileSize = 0;
-    dotdotENtry->DIR_FstClus = 0; // ddot的FstClus字段为父目录FstClus，若父目录为根目录，则设置为0
+    dotdotENtry->DIR_FstClus = 0; // ddot的FstClus字段为父目录FstClus，
+    // 若父目录为根目录，则设置为0
 }
 
 //mkdir时写入数据区

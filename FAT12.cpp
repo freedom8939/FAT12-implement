@@ -340,40 +340,41 @@ void mkdir(string &dirName)  {
         cout << "没有可分配的簇号" << endl;
         return;
     }
+    setClus(clus_num);
 
-
-    cout << "位置是" << (1+9+9+14-2+clus_num) * 512 << endl;
+    cout << "起始位置是" << (1+9+9+14-2+clus_num) * 512 << endl;
     cout << "分配的簇号是" << clus_num <<endl;
-
     rootEntry.DIR_FstClus = clus_num;
 
-    //7.创建.目录
+    //7.创建.目录和..目录
     RootEntry dot,dotdot;
-
     createDotDirectory(&dot,clus_num);
     createDotDotDirectory(&dotdot);
-//    cout << "分配的簇号是" << clus_num << endl; // 19号簇是空的我们创建RootEntry和.以及..并且放进去
+
+    //把.和..写进vfd磁盘
     writeRootEntry(clus_num,dot,0);
     writeRootEntry(clus_num,dotdot,1);
 
-    uint16_t nextClus = getFreeClusNum();
-    rootEntry.DIR_FstClus = nextClus;
-//    setClus(nextClus, 0xFFF);
-    //先分配一个扇区
-    rootEntry.DIR_FileSize = SECTOR_SIZE;
-    writeRootEntry(clus_num,rootEntry,2);
 
+    rootEntry.DIR_FileSize = SECTOR_SIZE;
+    //这个是添加到根目录的！！干嘛出现这里
+//    writeRootEntry(clus_num,rootEntry,2);
 
     //write_to_directory_root
     write_to_directory_root(rootEntry);
     cout << "写入成功" << endl;
+
+    read_fat_from_vfd(PATH);
+    read_mbr_from_vfd(PATH);
     fflush(diskFile);
 }
 
 int main() {
     showCommandList();
     Init();
-
+//    uint16_t i = getFreeClusNum();
+//    cout << "空闲的簇号是" << i << endl;
+//    cout << "所在FAT[" << i / 2 << "]"<<endl;
     while (true) {
         cout << "A>:";
         getline(cin, command);
