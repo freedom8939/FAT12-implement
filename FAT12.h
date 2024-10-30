@@ -348,10 +348,11 @@ void setClus(uint16_t clusNum) {
 
 //获取空闲的簇号
 uint16_t getFreeClusNum() {
+    read_fat_from_vfd(PATH);
     for (uint8_t i = 2; i < 1536; i++) {
         uint16_t freeClusNum = getClus(&disk.FAT1[i / 2].data[i % 2], i % 2);
         if (freeClusNum == 0) { // freeClusNum 空闲簇号
-            return i; // 返回空闲簇号
+            return i ; // 返回空闲簇号
         }
     }
     return 0xFFF; // 没有空闲簇
@@ -572,12 +573,43 @@ void touch(string str) {
         uint32_t offset = (31 + clus_num) * 512;
         fseek(diskFile, offset, SEEK_SET);
         fwrite(content.c_str(), sizeof(char), rootEntry.DIR_FileSize, diskFile);
-
         usedClus(clus_num);
-    }else{
-        //大于512
+    }else{        //大于512
         cout <<"大于512B,需要多次写入"<<endl;
+
+        uint32_t remain_size = content.size();  //获取到总大小
+        uint8_t currentClus = clus_num; //使用分配的第一个簇号
+        uint32_t written_size = 0;  //已经写了多少
+
+        //观察需要几个扇区
+        uint16_t need_sector_num = (rootEntry.DIR_FileSize + 511) / 512; // 向上取整
+        cout << "需要的扇区数为：" <<(int) need_sector_num << endl;
+
+
+        for(uint8_t i = 0; i < need_sector_num; i++){  //需要写几次
+            uint32_t offset = (31 + currentClus) * 512;  //移动到数据区并且写入
+            fseek(diskFile, offset, SEEK_SET);
+
+            uint32_t bytesToWrite = (remain_size < 512) ? remain_size : 512; // 确保不超过剩余字节数
+
+            fwrite(content.c_str() + written_size, sizeof(char), bytesToWrite , diskFile);
+
+            written_size += bytesToWrite ;
+            remain_size -= bytesToWrite ;
+            //获取下一个簇号
+            uint16_t nextClus = getFreeClusNum();  //下一个簇号 写在本个fat块中
+            setClus(nextClus);   //setClus是根据簇把数据写入的 所以
+            cout << "存的簇号是" << nextClus<< endl;
+            currentClus = nextClus ;
+        }
+        //写完了扇区直接标记此FAT块已经用过
+        usedClus(currentClus);
     }
+    //写入FAT语句呢
+
+
+
+
     write_to_directory_root(rootEntry);
     //8.重新读取fat表项
     read_fat_from_vfd(PATH);
