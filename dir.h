@@ -18,7 +18,7 @@ void dir() {
         string extension = ext;
         //去掉空格
         fileName = fileName.substr(0, fileName.find_last_not_of(' ') + 1);
-        extension = extension.substr(0, fileName.find_last_not_of(' ') + 2);
+        extension = extension.substr(0, fileName.find_last_not_of(' ') + 3 );
 
         //进行与操作
         /*

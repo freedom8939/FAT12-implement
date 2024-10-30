@@ -350,8 +350,7 @@ void setClus(uint16_t clusNum) {
 uint16_t getFreeClusNum() {
     for (uint8_t i = 2; i < 1536; i++) {
         uint16_t freeClusNum = getClus(&disk.FAT1[i / 2].data[i % 2], i % 2);
-        if (freeClusNum == 0) { // freeClusNum 空闲簇
-
+        if (freeClusNum == 0) { // freeClusNum 空闲簇号
             return i; // 返回空闲簇号
         }
     }
@@ -465,6 +464,26 @@ void pwd() {
     cout << path << endl;
 }
 
+//标记此簇已经使用
+void usedClus(uint16_t clusNum){
+    uint8_t *entry = &disk.FAT1[clusNum / 2].data[clusNum % 2];  // 对应FAT表项的字节地址
+
+    if (!(clusNum % 2)) {
+        entry[0] = 0xFF;                  // 第0字节全部为F
+        entry[1] = entry[1] | 0x0F ;
+    } else {
+        entry[0] = entry[0] | 0xF0;
+        entry[1] = 0xFF;             // 第1字节全部为F
+    }
+
+    fseek(diskFile, 512, SEEK_SET); // 移动到文件开头
+    fwrite(disk.FAT1, sizeof(disk.FAT1), 1, diskFile); // 写入 FAT1
+
+    // 假设 FAT2 紧接在 FAT1 后面
+    fseek(diskFile, 10 * 512, SEEK_SET); // 移动到 FAT2 的位置
+    fwrite(disk.FAT2, sizeof(disk.FAT2), 1, diskFile); // 写入 FAT2
+}
+
 //解析时间
 void parseTime(RootEntry entry) {
     //解析
@@ -518,53 +537,48 @@ void touch(string str) {
     setFileName(rootEntry, str);
     //1.1 判断重复
     string fileName = str.substr(6);
-
     RootEntry *pEntry = findFile(fileName);
     if (pEntry != nullptr) {
         cout << "文件已存在" << endl;
         return;
     }
-
     //2.设置文件属性
     rootEntry.DIR_Attr = 0x00;
-
     //3.10个保留位
     memset(rootEntry.DIR_reserve, 0, sizeof(rootEntry.DIR_reserve));
-
     //4.设置时间
     setTime(rootEntry);
 
 
-
     //5.分配簇号
     uint16_t clus_num = getFreeClusNum();
+    cout << "分配的簇号是" << clus_num << endl;
     if (clus_num == 0xFFF) {
         cout << "没有可分配的簇号" << endl;
     }
-    setClus(clus_num);
+
     rootEntry.DIR_FstClus = clus_num;
 
-    //6.文件大小设置 TODO 稍后设定  需要根据读取区域的大小来分配几个扇区
-    //6.1开辟并且清空缓冲区
-    char buffer[512];  // 创建512字节的缓冲区
-    memset(buffer, 0, sizeof(buffer));
-    //6.2输入内容
-    cout << "请输入想要存入的内容:";
-    cin.getline(buffer, sizeof(buffer));
-    //6.3设置好文件的大小
-    rootEntry.DIR_FileSize = strlen(buffer);
-    cout << "输入的文件大小为：" << rootEntry.DIR_FileSize << " 字节" << std::endl;
+    //输入内容
+    cout << "请输入内容:";
+    string content = "";
+    getline(cin, content);
 
-    //6.4写道数据区得到簇 然后把他写进数据区即可了 不是有簇号吗
-    uint32_t offset = (31 + clus_num) * 512;
-    fseek(diskFile, offset, SEEK_SET);
-    fwrite(buffer, sizeof(char), rootEntry.DIR_FileSize, diskFile); // 写入文件内容
+    //设置文件大小
+    rootEntry.DIR_FileSize = content.size();
 
+    //判断大小,如果是较小的直接结束簇就行
+    if(content.size() <= 512){
+        uint32_t offset = (31 + clus_num) * 512;
+        fseek(diskFile, offset, SEEK_SET);
+        fwrite(content.c_str(), sizeof(char), rootEntry.DIR_FileSize, diskFile);
 
-    //7.先写到根目录 后期在todo修改
-    cout << "写入文件成功" << endl;
+        usedClus(clus_num);
+    }else{
+        //大于512
+        cout <<"大于512B,需要多次写入"<<endl;
+    }
     write_to_directory_root(rootEntry);
-
     //8.重新读取fat表项
     read_fat_from_vfd(PATH);
     read_mbr_from_vfd(PATH);

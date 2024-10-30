@@ -62,10 +62,13 @@ RootEntry *findFile(string &fileName) {
         // 创建标准化的文件名和扩展名
         string origin_file_name = string(_name);
         string origin_file_ext = string(_ext);
-
+//        cout << "---" << origin_file_name << "-" <<origin_file_ext <<endl;
         //去除空格
         origin_file_name = origin_file_name.substr(0, origin_file_name.find_last_not_of(' ') + 1);
-        origin_file_ext = origin_file_ext.substr(0, origin_file_name.find_last_not_of(' ') + 1);
+        origin_file_ext = origin_file_ext.substr(0, origin_file_name.find_last_not_of(' ') + 3);
+
+//        cout << "---" << origin_file_name << "-" <<origin_file_ext <<endl;
+
 
         //比较文件名和扩展名，忽略大小写
         bool isNameMatch = strcasecmp(origin_file_name.c_str(), baseName.c_str()) == 0;
@@ -338,11 +341,15 @@ void mkdir(string &dirName) {
 
     //6.分配簇号
     uint16_t clus_num = getFreeClusNum();
+    //7.把这个簇标记为已经使用
+
+
     if (clus_num == 0xFFF) {
         cout << "没有可分配的簇号" << endl;
     }
 
-    setClus(clus_num);
+//    setClus(clus_num);
+    usedClus(clus_num);
 
     cout << "起始位置是" << (1 + 9 + 9 + 14 - 2 + clus_num) * 512 << endl;
     cout << "分配的簇号是" << clus_num << endl;
