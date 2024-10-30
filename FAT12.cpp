@@ -139,8 +139,7 @@ void readFileData(uint16_t firstCluster, uint32_t fileSize) {
 
         unsigned short nextClusNum = getClus(&disk.FAT1[currentCluster / 2].data[currentCluster % 2],
                                              currentCluster % 2);
-        currentCluster = nextClusNum + 1;
-        cout << "读取的簇是" << currentCluster << endl;
+        currentCluster = nextClusNum ;//+1
         // 如果获取的下一个簇是 ff8 ~ fff，结束读取
         if (currentCluster >= 0xFF8) { // 对于 FAT12，0x0FF8 及以上的簇表示 EOF
             break;
@@ -381,14 +380,6 @@ void mkdir(string &dirName) {
 int main() {
     showCommandList();
     Init();
- //测试用
-/*uint16_t i = getFreeClusNum();
-    cout << "空闲的簇是" << i  << endl;
-    cout << "他的FAT表项是" <<( i / 2 )<< endl;*/
-    int i = 25;
-    uint32_t f = getClus(&disk.FAT1[ i /2 ].data[i%2],i%2);
-    cout << "下一个簇号" << f << endl;
-
     while (true) {
         cout << "A>:";
         getline(cin, command);

@@ -506,7 +506,7 @@ void setFileName(RootEntry &rootEntry, string str) {
     string fileName = str.substr(6);
     uint8_t len = fileName.length();
     if (len > 11 || len < 2) {   // 超过11字符或小于2字符
-        cerr << "文件名过长或太短" << endl;
+        cout << "文件名过长或太短" << endl;
         return;
     }
     // 找到文件名和扩展名的分隔点
@@ -543,13 +543,14 @@ void touch(string str) {
         cout << "文件已存在" << endl;
         return;
     }
+
     //2.设置文件属性
     rootEntry.DIR_Attr = 0x00;
+
     //3.10个保留位
     memset(rootEntry.DIR_reserve, 0, sizeof(rootEntry.DIR_reserve));
     //4.设置时间
     setTime(rootEntry);
-
 
     //5.分配簇号
     uint16_t clus_num = getFreeClusNum();
@@ -557,7 +558,6 @@ void touch(string str) {
     if (clus_num == 0xFFF) {
         cout << "没有可分配的簇号" << endl;
     }
-
     rootEntry.DIR_FstClus = clus_num;
 
     //输入内容
@@ -578,13 +578,12 @@ void touch(string str) {
         cout <<"大于512B,需要多次写入"<<endl;
 
         uint32_t remain_size = content.size();  //获取到总大小
-        uint8_t currentClus = clus_num; //使用分配的第一个簇号
+        uint8_t currentClus = clus_num + 1; //使用分配的第一个簇号
         uint32_t written_size = 0;  //已经写了多少
 
         //观察需要几个扇区
         uint16_t need_sector_num = (rootEntry.DIR_FileSize + 511) / 512; // 向上取整
         cout << "需要的扇区数为：" <<(int) need_sector_num << endl;
-
 
         for(uint8_t i = 0; i < need_sector_num; i++){  //需要写几次
             uint32_t offset = (31 + currentClus) * 512;  //移动到数据区并且写入
@@ -597,18 +596,24 @@ void touch(string str) {
             written_size += bytesToWrite ;
             remain_size -= bytesToWrite ;
             //获取下一个簇号
-            uint16_t nextClus = getFreeClusNum();  //下一个簇号 写在本个fat块中
-            setClus(nextClus);   //setClus是根据簇把数据写入的 所以
+            uint16_t nextClus = getFreeClusNum();
+            setClus(nextClus);   //setClus是根据簇把数据写入的
             cout << "存的簇号是" << nextClus<< endl;
             currentClus = nextClus ;
+
+            // 更新 FAT 表到磁盘
+            fseek(diskFile, 512, SEEK_SET);  // 移动到 FAT1 的位置
+            fwrite(disk.FAT1, sizeof(disk.FAT1), 1, diskFile);  // 写入 FAT1
+
+            // 假设 FAT2 紧接在 FAT1 后面
+            fseek(diskFile, 10 * 512, SEEK_SET);  // 移动到 FAT2 的位置
+            fwrite(disk.FAT2, sizeof(disk.FAT2), 1, diskFile);  // 写入 FAT2
+
+
         }
         //写完了扇区直接标记此FAT块已经用过
-        usedClus(currentClus);
+        usedClus(currentClus );
     }
-    //写入FAT语句呢
-
-
-
 
     write_to_directory_root(rootEntry);
     //8.重新读取fat表项
