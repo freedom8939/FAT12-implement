@@ -75,7 +75,7 @@ RootEntry *findFile(string &fileName) {
             return &disk.rootDirectory[i]; // 返回找到的文件条目
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -374,9 +374,10 @@ void mkdir(string &dirName) {
 int main() {
     showCommandList();
     Init();
-    uint16_t i = getFreeClusNum();
+/* //测试用
+uint16_t i = getFreeClusNum();
     cout << "空闲的簇是" << i  << endl;
-    cout << "他的FAT表项是" <<( i / 2 )<< endl;
+    cout << "他的FAT表项是" <<( i / 2 )<< endl;*/
     while (true) {
         cout << "A>:";
         getline(cin, command);

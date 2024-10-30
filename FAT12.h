@@ -214,7 +214,7 @@ void toLowerCase(string &str) {
 void readFileData(uint16_t firstCluster, uint32_t fileSize);
 
 //根目录下查找文件FATEntry
-RootEntry *findFile(const string &fileName);
+RootEntry *findFile(string &fileName);
 
 //执行命令
 void executeCommand(string &command);
@@ -237,6 +237,7 @@ void showCommandList() {
     cout << "(2):cat 文件名" << endl;
     cout << "(3):cd 文件夹" << endl;
     cout << "(4):pwd" << endl;
+    cout << "(5):touch" << endl;
     cout << "(0):exit" << endl;
 }
 
@@ -340,7 +341,7 @@ void setClus(uint16_t clusNum) {
     fwrite(disk.FAT1, sizeof(disk.FAT1), 1, diskFile); // 写入 FAT1
 
     // 假设 FAT2 紧接在 FAT1 后面
-    fseek(diskFile, 10 * 512 , SEEK_SET); // 移动到 FAT2 的位置
+    fseek(diskFile, 10 * 512, SEEK_SET); // 移动到 FAT2 的位置
     fwrite(disk.FAT2, sizeof(disk.FAT2), 1, diskFile); // 写入 FAT2
 
 }
@@ -480,7 +481,7 @@ void parseTime(RootEntry entry) {
 }
 
 //touch命令中的设置名称11位部分抽离到这里
-void setDirName(RootEntry &rootEntry,string str){
+void setFileName(RootEntry &rootEntry, string str) {
     //1.处理文件名
     string fileName = str.substr(6);
     uint8_t len = fileName.length();
@@ -511,10 +512,18 @@ void setDirName(RootEntry &rootEntry,string str){
 }
 
 //touch命令
-void touch(string str){
+void touch(string str) {
     RootEntry rootEntry;
     //1.设置文件名称
-    setDirName(rootEntry,str);
+    setFileName(rootEntry, str);
+    //1.1 判断重复
+    string fileName = str.substr(6);
+
+    RootEntry *pEntry = findFile(fileName);
+    if (pEntry != nullptr) {
+        cout << "文件已存在" << endl;
+        return;
+    }
 
     //2.设置文件属性
     rootEntry.DIR_Attr = 0x00;
@@ -524,6 +533,8 @@ void touch(string str){
 
     //4.设置时间
     setTime(rootEntry);
+
+
 
     //5.分配簇号
     uint16_t clus_num = getFreeClusNum();
@@ -538,8 +549,8 @@ void touch(string str){
     char buffer[512];  // 创建512字节的缓冲区
     memset(buffer, 0, sizeof(buffer));
     //6.2输入内容
-    cout << "请输入想要存入的内容:" ;
-    cin.getline(buffer,sizeof(buffer));
+    cout << "请输入想要存入的内容:";
+    cin.getline(buffer, sizeof(buffer));
     //6.3设置好文件的大小
     rootEntry.DIR_FileSize = strlen(buffer);
     cout << "输入的文件大小为：" << rootEntry.DIR_FileSize << " 字节" << std::endl;
