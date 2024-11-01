@@ -11,6 +11,12 @@ void read_fat_from_vfd(char *vfd_file) {
     fread(&disk.FAT1, sizeof(FATEntry), 1536, diskFile);
 }
 
+void read_rootDir_from_vfd(char *vfd_file){
+    fseek(diskFile, (1+9+9)*512, SEEK_SET);
+    fread(&disk.rootDirectory, 7168, 1, diskFile);
+
+}
+
 /**
  * 读取镜像的mbr到本地磁盘
  */
@@ -266,7 +272,10 @@ void executeCommand(string &command) {
         touch(command);
     } else if (command == "gc") { //当前所处的簇号
         cout << (uint32_t) getNowClu() << endl;
-    } else {
+    } else if(command.substr(0,3)== "rm "){
+        deleteFile(command);
+    }
+    else {
         cout << "未知命令: " << command << endl;
     }
 }
