@@ -238,6 +238,7 @@ void showCommandList() {
     cout << "(3):cd 文件夹" << endl;
     cout << "(4):pwd" << endl;
     cout << "(5):touch" << endl;
+    cout << "(6):rm 文件名" << endl;
     cout << "(0):exit" << endl;
 }
 
@@ -652,17 +653,19 @@ void clearDataArea(uint16_t startClus) {
     uint16_t currentClus = startClus;
 
     while (currentClus != 0xFFF) { // 直到最后一个簇
+        cout << "清空了" <<currentClus <<"号簇" << endl;
         // 计算数据区中当前簇的偏移量
         uint32_t offset = (31 + currentClus) * 512; // 计算数据区的偏移
-
         // 将当前簇的数据区清空
         fseek(diskFile, offset, SEEK_SET);
         char emptyBuffer[512] = {0}; // 创建一个全零的缓冲区
-        fwrite(emptyBuffer, sizeof(char), 512, diskFile); // 清空数据
+        fwrite(emptyBuffer, 1, 512, diskFile);
 
         // 获取下一个簇号
-        currentClus = getClus(&disk.FAT1[currentClus /2 ].data[currentClus %2],currentClus % 2); // 获取下一个簇
+        currentClus = getClus(&disk.FAT1[currentClus /2 ].data[currentClus %2],currentClus % 2);
+
     }
+    //最后一个簇是FF 无内容
 }
 
 void deleteFile(string filename) {
@@ -685,10 +688,13 @@ void deleteFile(string filename) {
     // 4. 清除FAT链表中的所有簇
     while (clus_num != 0xFFF) {
         uint16_t next_clus = getClus(&disk.FAT1[clus_num / 2].data[clus_num % 2],clus_num %2);
-        setFATEntry(clus_num, 0x000);  // 标记簇为空闲
+        setFATEntry(clus_num, 0);  // 标记簇为空闲
         clus_num = next_clus;
     }
-    setFATEntry(firstClus, 0x000);  // 标记簇为空闲
+    setFATEntry(firstClus, 0);  // 标记簇为空闲
+
+
+//    setFATEntry(firstClus, 0x000);  // 标记簇为空闲
 
     //4.1 找到他的根目录把那个32字节删掉
     uint32_t offset = (firstClus * sizeof(RootEntry)) + (31 * 512); // 根目录从第31个扇区开始
@@ -701,15 +707,14 @@ void deleteFile(string filename) {
     fwrite(disk.FAT1, sizeof(disk.FAT1), 1, diskFile); // 写入 FAT1
 
     // 假设 FAT2 紧接在 FAT1 后面
-    fseek(diskFile, 10 * 512, SEEK_SET); // 移动到 FAT2 的位置
-    fwrite(disk.FAT2, sizeof(disk.FAT2), 1, diskFile); // 写入 FAT2
+    fseek(diskFile, 10 * 512, SEEK_SET);
+    fwrite(disk.FAT2, sizeof(disk.FAT2), 1, diskFile);
 
     fseek(diskFile,(1+9+9)*512,SEEK_SET);
     fwrite(disk.rootDirectory, 7168, 1, diskFile);
 
 
-    // 6. 刷新文件并更新FAT表
-    fflush(diskFile);
+    // 6. 更新FAT表
     read_fat_from_vfd(PATH);
     read_mbr_from_vfd(PATH);
     read_rootDir_from_vfd(PATH);
