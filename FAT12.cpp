@@ -255,7 +255,9 @@ void cd(string &_name) {
 void executeCommand(string &command) {
     if (command == "dir") {
         dir(); // 显示根目录的结构
-    } else if (command == "exit") {
+    } else if (command == "format"){
+        format();
+    }else if (command == "exit") {
         cout << "退出程序..." << endl;
         exit(0);
     } else if (command.substr(0, 4) == "cat ") { // 必须是 cat空格 命令开头
@@ -276,7 +278,7 @@ void executeCommand(string &command) {
         deleteFile(command);
     }
     else {
-        cout << "未知命令: " << command << endl;
+
     }
 }
 

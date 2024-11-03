@@ -16,6 +16,7 @@ using namespace std;
 #define PATH "./wjyImg.vfd"
 FILE *diskFile = fopen(PATH, "rb+");
 uint8_t now_clu = 2;
+
 /**
 * 定义磁盘的信息（并未引入教师的磁盘)
 */
@@ -48,8 +49,8 @@ typedef struct FATEntry {
  * MBR
  */
 typedef struct MBRHeader {
-    char BS_jmpBOOT[3];
-    char BS_OEMName[8];
+    uint8_t BPB_JumpInstruction[3];
+    uint8_t BPB_OEMName[8];
     // 每个扇区字节数 512
     uint16_t BPB_BytesPerSec;
     // 每簇扇区数 1
@@ -120,8 +121,8 @@ extern Disk disk;
 
 //初始化MBR
 void InitMBR(Disk *disk) {
-    memset(disk->MBR.BS_jmpBOOT, 3, 0);
-    memcpy(disk->MBR.BS_OEMName, "LNNU WJY", 8);
+    memset(disk->MBR.BPB_JumpInstruction, 3, 0);
+    memcpy(disk->MBR.BPB_OEMName, "LNNU WJY", 8);
     disk->MBR.BPB_BytesPerSec = 512;
     disk->MBR.BPB_SecPerClus = 1;
     disk->MBR.BPB_ResvdSecCnt = 1;
@@ -147,7 +148,7 @@ void InitMBR(Disk *disk) {
 
 //打印MBR
 void print_MBR(MBRHeader *temp) {
-    printf("Disk Name - 磁盘名称: %s\n", temp->BS_OEMName);
+    printf("Disk Name - 磁盘名称: %s\n", temp->BPB_OEMName);
     printf("Sector Size - 扇区大小: %d\n", temp->BPB_BytesPerSec);
     printf("Sectors per cluster - 每簇扇区数: %d\n", temp->BPB_SecPerClus);
     printf("Number of sectors occupied by boot - 引导占用的扇区数: %d\n", temp->BPB_ResvdSecCnt);
@@ -240,6 +241,7 @@ void showCommandList() {
     cout << "(5):touch" << endl;
     cout << "(6):rm 文件名" << endl;
     cout << "(7):mkdir 文件夹名" << endl;
+    cout << "(8):format 命令" << endl;
     cout << "(0):exit" << endl;
 }
 
@@ -365,9 +367,8 @@ void setFATEntry(uint16_t clusterNum, uint16_t value) {
 }
 
 
-
 uint16_t getClusValue(uint16_t clusNum) {
-    FATEntry& entry = disk.FAT1[clusNum / 2];
+    FATEntry &entry = disk.FAT1[clusNum / 2];
     uint16_t value;
 
     if (clusNum % 2 == 0) {
@@ -497,12 +498,12 @@ void pwd() {
 }
 
 //标记此簇已经使用
-void usedClus(uint16_t clusNum){
+void usedClus(uint16_t clusNum) {
     uint8_t *entry = &disk.FAT1[clusNum / 2].data[clusNum % 2];  // 对应FAT表项的字节地址
 
     if (!(clusNum % 2)) {
         entry[0] = 0xFF;                  // 第0字节全部为F
-        entry[1] = entry[1] | 0x0F ;
+        entry[1] = entry[1] | 0x0F;
     } else {
         entry[0] = entry[0] | 0xF0;
         entry[1] = 0xFF;             // 第1字节全部为F
@@ -561,7 +562,9 @@ void setFileName(RootEntry &rootEntry, string str) {
     memcpy(rootEntry.DIR_Name + 8, extension.c_str(), extension.length());
 
 }
+
 void read_rootDir_from_vfd(char *vfd_file);
+
 //touch命令
 void touch(string str) {
     RootEntry rootEntry;
@@ -608,7 +611,7 @@ void touch(string str) {
     } else {
         // 计算需要的扇区数
         uint16_t need_sector_num = (rootEntry.DIR_FileSize + 511) / 512;
-        cout << "需要的扇区数为：" << (int)need_sector_num << endl;
+        cout << "需要的扇区数为：" << (int) need_sector_num << endl;
 
         //
         for (uint8_t i = 0; i < need_sector_num; i++) {
@@ -624,7 +627,7 @@ void touch(string str) {
                 // 获取空闲簇,并且把下个簇标记为已使用
                 uint16_t next_free_clus = getFreeClusNum();
                 usedClus(next_free_clus);
-                setFATEntry(a,next_free_clus); //成功连接到下一个
+                setFATEntry(a, next_free_clus); //成功连接到下一个
                 a = next_free_clus;
             } else {
                 // 最后一个簇直接标记为结束
@@ -645,7 +648,7 @@ void clearDataArea(uint16_t startClus) {
     uint16_t currentClus = startClus;
 
     while (currentClus != 0xFFF) { // 直到最后一个簇
-        cout << "清空了" <<currentClus <<"号簇" << endl;
+        cout << "清空了" << currentClus << "号簇" << endl;
         // 计算数据区中当前簇的偏移量
         uint32_t offset = (31 + currentClus) * 512; // 计算数据区的偏移
         // 将当前簇的数据区清空
@@ -654,7 +657,7 @@ void clearDataArea(uint16_t startClus) {
         fwrite(emptyBuffer, 1, 512, diskFile);
 
         // 获取下一个簇号
-        currentClus = getClus(&disk.FAT1[currentClus /2 ].data[currentClus %2],currentClus % 2);
+        currentClus = getClus(&disk.FAT1[currentClus / 2].data[currentClus % 2], currentClus % 2);
 
     }
     //最后一个簇是FF 无内容
@@ -668,7 +671,7 @@ void deleteFile(string filename) {
         cout << "文件不存在" << endl;
         return;
     }
-    cout << "待删除的文件信息" << pEntry->DIR_FstClus<<endl;
+    cout << "待删除的文件信息" << pEntry->DIR_FstClus << endl;
 
     // 2. 获取文件的起始簇号
     uint16_t clus_num = pEntry->DIR_FstClus;
@@ -679,7 +682,7 @@ void deleteFile(string filename) {
 
     // 4. 清除FAT链表中的所有簇
     while (clus_num != 0xFFF) {
-        uint16_t next_clus = getClus(&disk.FAT1[clus_num / 2].data[clus_num % 2],clus_num %2);
+        uint16_t next_clus = getClus(&disk.FAT1[clus_num / 2].data[clus_num % 2], clus_num % 2);
         setFATEntry(clus_num, 0);  // 标记簇为空闲
         clus_num = next_clus;
     }
@@ -702,7 +705,7 @@ void deleteFile(string filename) {
     fseek(diskFile, 10 * 512, SEEK_SET);
     fwrite(disk.FAT2, sizeof(disk.FAT2), 1, diskFile);
 
-    fseek(diskFile,(1+9+9)*512,SEEK_SET);
+    fseek(diskFile, (1 + 9 + 9) * 512, SEEK_SET);
     fwrite(disk.rootDirectory, 7168, 1, diskFile);
 
 
@@ -711,4 +714,64 @@ void deleteFile(string filename) {
     read_mbr_from_vfd(PATH);
     read_rootDir_from_vfd(PATH);
     cout << "文件删除成功" << endl;
+}
+
+
+//2.初始化FAT
+void format_InitFAT() {
+    uint8_t _fat[1536] = {0};
+    _fat[0]= 0xF0;
+    _fat[1]= 0xFF;
+    _fat[2]= 0xFF;
+    //寻找到FAT扇区的位置
+    fseek(diskFile, SECTOR_SIZE, SEEK_SET);
+    fwrite(_fat, 1536, 1, diskFile);
+
+    //把FAT1的部分赋值到FAT2
+    fseek(diskFile, SECTOR_SIZE + sizeof(_fat), SEEK_SET);
+    fwrite(_fat, sizeof(_fat), 1, diskFile);
+
+    //写入后重新读取
+    read_fat_from_vfd(PATH);
+}
+
+//3. 初始化根目录区域
+void format_RootArea() {
+    uint32_t root_directory_size[7168] = {0}; // 14 * 512
+    fseek(diskFile, SECTOR_SIZE * (1 + 9 + 9), SEEK_SET); // FAT表之后
+    fwrite(root_directory_size, 7168, 1, diskFile);
+    read_rootDir_from_vfd(PATH);
+}
+
+//4.初始化数据区
+void format_DataArea() {
+    uint16_t root_directory_size[] = {0};
+    int numClusters = DATA_SECTOR_NUM;  // FAT12中最多支持的数据簇数量
+
+    fseek(diskFile, SECTOR_SIZE * (1 + 9 + 9 + 14), SEEK_SET);
+    for (int i = 0; i < numClusters; ++i) {
+        fwrite(root_directory_size, 512, 1, diskFile);
+    }
+}
+
+//实现format命令
+void format() {
+    char isDelete;
+    cout << "敏感操作，是否确定删除？(y/n): ";
+    cin >> isDelete;
+
+    if (isDelete == 'y' || isDelete == 'Y') {
+        //2.初始化FAT
+        format_InitFAT();
+        //3. 初始化根目录区域
+        format_RootArea();
+        //4.初始化数据区
+        format_DataArea();
+        cout << "已经初始化成功" << endl;
+    } else {
+        cout << "未进行format操作" << endl;
+        return;
+    }
+
+
 }
