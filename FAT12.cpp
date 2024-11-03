@@ -352,28 +352,20 @@ void mkdir(string &dirName) {
     //6.分配簇号
     uint16_t clus_num = getFreeClusNum();
     //7.把这个簇标记为已经使用
-
-
     if (clus_num == 0xFFF) {
         cout << "没有可分配的簇号" << endl;
     }
-
     usedClus(clus_num);
-
     cout << "起始位置是" << (1 + 9 + 9 + 14 - 2 + clus_num) * 512 << endl;
     cout << "分配的簇号是" << clus_num << endl;
     rootEntry.DIR_FstClus = clus_num;
-
-
     //7.创建.目录和..目录
     RootEntry dot, dotdot;
     createDotDirectory(&dot, clus_num);
     createDotDotDirectory(&dotdot);
-
     //把.和..写进vfd磁盘
     writeRootEntry(clus_num, dot, 0);
     writeRootEntry(clus_num, dotdot, 1);
-
 
     //这个是添加到根目录的!不出现在这里调    rootEntry.DIR_FileSize = SECTOR_SIZE;试！
 //    writeRootEntry(clus_num,rootEntry,2);
@@ -390,7 +382,6 @@ void mkdir(string &dirName) {
 int main() {
     showCommandList();
     Init();
-    setFATEntry(2,4);
     while (true) {
         cout << "A>:";
         getline(cin, command);

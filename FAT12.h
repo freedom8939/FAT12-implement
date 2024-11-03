@@ -239,6 +239,7 @@ void showCommandList() {
     cout << "(4):pwd" << endl;
     cout << "(5):touch" << endl;
     cout << "(6):rm 文件名" << endl;
+    cout << "(7):mkdir 文件夹名" << endl;
     cout << "(0):exit" << endl;
 }
 
@@ -566,7 +567,6 @@ void touch(string str) {
     RootEntry rootEntry;
     // 1. 设置文件名称
     setFileName(rootEntry, str);
-
     // 1.1 判断重复
     string fileName = str.substr(6);
     RootEntry *pEntry = findFile(fileName);
@@ -574,20 +574,15 @@ void touch(string str) {
         cout << "文件已存在" << endl;
         return;
     }
-
     // 2. 设置文件属性
     rootEntry.DIR_Attr = 0x00;
-
     // 3. 10个保留位
     memset(rootEntry.DIR_reserve, 0, sizeof(rootEntry.DIR_reserve));
-
     // 4. 设置时间
     setTime(rootEntry);
-
     // 5. 分配簇号并标记已使用
     uint16_t a = getFreeClusNum();
     cout << "分配的簇号是: " << a << endl;
-
     if (a == 0xFFF) {
         cout << "没有可分配的簇号" << endl;
         return;
@@ -604,8 +599,6 @@ void touch(string str) {
 
     uint32_t remain_size = content.size();
     uint32_t written_size = 0;
-
-
     if (remain_size <= 512) {
         // 直接写入并结束
         uint32_t offset = (31 + a) * 512;
@@ -639,7 +632,6 @@ void touch(string str) {
             }
         }
     }
-
     // 6. 更新根目录条目
     write_to_directory_root(rootEntry);
 
