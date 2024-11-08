@@ -114,180 +114,6 @@ FAT1表的结构：
 
 ![image-20241030204744138](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241030204744138.png)
 
-## 2.作业部分 grp07-newfd5.vfd：
-
-### 2.0 磁盘分区的位置
-
-+ 0~ 200 （hex） 为MBR的区域  即占据512字节。 1扇区
-+ 200~ 800 (hex)  为FAT1的区域 占据 1536字节  3扇区
-+ 800~ E00(hex) 为FAT2的区域 占据 1536字节 3扇区
-+ E00 ~ 2E00（hex）为根目录区的区域 占据 8192字节 16扇区
-+ 其余的部分均为 数据区 2880-16-3-1 =2,860个数据区
-
-### 2.1 读取MBR部分
-
-> + 磁盘名称: MSWIN4.1
-> + 扇区大小: 512
-> + 每簇扇区数: 2
-> + 引导占用的扇区数: 1
-> + FAT 表数量: 2
-> + 根目录最大条目数: 112
-> + 扇区总数: 1440
-> + 每个 FAT 表占用的扇区数: 3
-> + 每个磁道的扇区数: 9
-> + 磁头数量: 2
-> + 隐藏扇区数: 0
-> + 卷序列号: 476253462
-> + 卷标: TEST5
-> + 文件系统类型: FAT12
-
-![image-20241030205641413](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241030205641413.png)
-
-当我们读取到 55 AA 证明MBR已全部读取完毕。
-
-
-
-### 2.2 读取根目录区部分
-
-> 根目录区位置为： (1个MBR 512B + (FAT表数量 * 每个FAT表占用的扇区数)) * 512
->
-> 即 根据MBR可知 根目录区位置为 (1+ (2*3)) * 512 = EOO(HEX)
-
-![image-20241030210144608](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241030210144608.png)
-
-可以看到位置正确。
-
-可以看到每个RootEntry占据 32B。我们看到共有 5个部分。
-
----
-
-由1.4 表我们可以知道所有目录项的含义：
-
-`一.其中有三个txt文件`
-
->  dog.txt :(文件真实存在)  
->
-> + 占据 11 B
-> + 最后一次修改日期: 2015/10/15
-> + 最后一次修改时间:7:11
-> + 开始的簇号：3号簇
-
->*ew.txt :(文件第一个字节被标记为E5 说明已经被删除，这种逻辑删除有助于提升性能)  
->
->+ 占据134B
->+ 最后一次修改日期: 2015/11/15
->+ 最后一次修改时间:6:00
->+ 所在簇： 2号簇
-
-> river.txt(文件真实存在)
->
-> + 占据 15 B
-> + 最后一次修改日期: 2015/09/30
-> + 最后一次修改时间: 20:36
-> + 所在簇：7号簇
-
-`二.有一个文件夹（attr = ox10）`
-
-> 文件夹名字为 DATA
->
-> + 最后一次修改日期： 2015/11/15
-> + 最后一次修改时间 6:23 
-> + 所在簇： 4号簇
-
-#### 2.2.1读取根目录下DATA文件夹的子内容
-
-> 4800 hex ~ 4820 hex 为.当前目录
->
-> ![image-20241102120229886](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102120229886.png)
->
-> 4820 hex ~ 4840 hex 为..上一级目录
->
-> ![image-20241102120250883](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102120250883.png)
->
-> 4840 hex ~ 4860hex 为名字为`DIR`的某文件，无拓展名。大小为`1276`B
->
-> ![image-20241102120412507](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102120412507.png)
->
-> - 由于其起始簇在5号
->
-> - ( 1 + 3 + 3 + 16  + ( 5-2) * 2) * 512 = 
->
-> -  定位4c00hex。由于1276/1024= 1.多所以至少需要（2个簇）
->
->   所以我们需要找到FAT表去寻找对应的下一个簇
->
->   ![image-20241102123805234](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102123805234.png)
->
->   经过分析 下一个簇为6，我们直接定位位置 5000HEX.
->
->   所以经过链接我们知道其全部内容为：
-
-> `首个簇`：![image-20241102123918123](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102123918123.png)
->
-> `链接的簇`: 
->
-> ![image-20241102124030499](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102124030499.png)
->
-> 具体内容为：以下：
->
-> zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
-> zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
-> zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
->
-> 省略....
->
-> 4860 hex ~ 4880hex 为名字为 `dog.txt`的文本文档，所在位置为第8簇。大小为11B。
->
-> ![image-20241102120420223](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102120420223.png)
->
-> 其内容为: 分析第八簇的位置为：5800hex
->
-> ![image-20241102120722331](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102120722331.png)
->
-> 经分析：64:d ,6f:o
->
-> 所以内容为 dogdogdog
->
-> 其中第八簇的前512B为00，后512B为F6（未使用部分）。
-
-#### 2.2.3 读取根目录下的其他文件
-
-1. 查看river.txt
-
-![image-20241102120952976](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102120952976.png)
-
-由于其在第7簇，所以其位置应该在 5400hex:
-
-经分析其内容为：my first test
-
-2. 查看根目录下dog.txt
-
-   ![image-20241102121118781](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102121118781.png)
-
-由于首个簇在2E00hex,所以三号簇只需要加上两个扇区即可，所以得到位置：3200HEX。
-
-其内容为dogdogdog.
-
-3. 查看xew.txt 此文件已被标记为删除：
-
-![image-20241102125825544](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102125825544.png)
-
-所在第二个簇：所以( 1 + 3 + 3 + 16  + ( 簇号-2) * 2) * 512 = 2E00HEX
-
-但是其内容为：
-
-> zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
-> zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
-> zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
->
-> dogdogdog
-
-![image-20241102125729567](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102125729567.png)
-
-#### 存在的疑问：
-
-第二个簇和第三个簇 中间有9个扇区（4508 B）的空白部分，导致我不能够通过公式 (MBR + FAT1大小 + FAT2大小 + (（簇号）-2)) * 512 = ()hex定位具体的位置。
-
 ## 3.实现FAT12文件系统
 
 #### 3.1 简介介绍
@@ -300,6 +126,8 @@ FAT1表的结构：
 + `pwd` 命令，通过pwd命令可以获取当前用户所在路径。
 + `touch` 命令，通过touch命令用户可以创建需要的文件并且填入相应的内容保存到软盘。
 + `rm` 命令，通过rm 文件名 命令可以移除根目录下的某个文件名。具体的实现过程在下方介绍。
++ `mkdir` 命令，使用mkdir命令可以建立一个文件夹。
++ `format`命令，通过format命令可以格式化磁盘至初始化状态。
 
 #### 3.2 实验环境配置
 
@@ -652,11 +480,60 @@ void deleteFile(string filename) {
 
 ```
 
+#### 3.11 mkdir 命令
+
+实现逻辑：
+
+​     创建一个目录项，设置目录属性、保留字节、时间等等信息之后，分配对应的簇号，同时标记此簇已经被使用过了。此时创建 . (s当前目录)和..(上一级目录),并且把新目录项写到根目录项中，最后写回磁盘中。
+
+实现效果：
+
+![img](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image001.png)
+
+实现代码：
+
+![img](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image003.jpg)
+
+#### 3.12 Format命令
+
+实现逻辑：
+
+首先MBR区域是固定信息不应该被format。
+
+其次初始化FAT区，把前两个簇（0，1）的值设置为初始值 FF0 FFF。然后将1536大小的数组写入FAT1表的位置，然后将FAT1表的内容赋值到FAT2表，实现冗余备份。
+
+然后初始化根目录区域，根目录区域一共7168字节，相当于14个扇区，将其全部置为0，最后初始化数据区 把数据区的每个簇初始化为0。
+
+实现效果：
+
+![表格  描述已自动生成](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image004.png)
+
+1. 其中未改动.
+
+2. format前FAT
+
+![图形用户界面, 文本  描述已自动生成](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image005.png)
+
+forma*后FAT:
+
+![img](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image006.png)
+
+3. format前根目录区：
+
+![文本  描述已自动生成](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image008.jpg)
+
+***format\******后目录区：\***
+
+![文本  描述已自动生成](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image010.jpg)
+
+实现代码：
+
+![img](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image012.jpg)
+
+
+
 ## 4.实验总结：
 
 ​	通过本次实验，我了解了FAT12的实现结构和实现细节。掌握了使用c和c++进行文件操作的办法，如FSEEK（）以及FWRITE()等等函数的使用。了解了目录项的管理，簇的分配和释放，以及如何维护FAT链表，这些知识都有助于我了解文件创建、删除、管理等操作。
 
-​	在实验中我也遇到了一些挑战，比如如何正确表示簇的状态，如何管理簇，扇区。在这个过程中我提升了自己的编程思维和逻辑能力。同时我也体会到了数据结构的作用。虽然FAT12是较为古老的文件系统，但实现过程中仍然让我对操作系统知识有了重要理解。
-
-​	我也相信，这个实验将会给我的面试带来机遇，如上次面试面试官问道：在开发中是否使用过栈，我只是简单答出了递归，保存状态。做过了此次实验我相信更加能够回答出os的一些细节。同时我也期待线程管理的部分，希望通过os课程的进程管理实验来深入了解java多线程等实现细节。
-
+​    在实验中我也遇到了一些挑战，比如如何正确表示簇的状态，如何管理簇，扇区。在这个过程中我提升了自己的编程思维和逻辑能力。虽然FAT12是较为古老的文件系统，但实现过程中仍然让我对操作系统知识有了重要理解。
