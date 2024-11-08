@@ -1,5 +1,5 @@
 
-## 未使用图床，相信文档请下载readme.pdf
+## 未使用图床，详细文档请下载readme.pdf
 ## please download readme.pdf to read the whole docuement dut to not used PIC-GO. 
 
 # 操作系统FAT12实现
