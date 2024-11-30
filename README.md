@@ -1,9 +1,12 @@
+# 实现FAT12文件系统命令
 
 ## 未使用图床，详细文档请下载readme.pdf
-## please download readme.pdf to read the whole docuement dut to not used PIC-GO. 
+## please download readme.pdf to read the whole docuement。
+
+## 项目开源地址
+> https://github.com/freedom8939/FAT12-implement
 
 # 操作系统FAT12实现
-
 
 
 ## 1.FAT12简介
@@ -40,7 +43,7 @@
 
 ### 1.4 根目录的格式
 
-![image-20241030201849595](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241030201849595.png)
+![image-20241030201849595](.\doc\image-20241030201849595.png)
 
 ### 1.5 时间提取
 
@@ -48,11 +51,11 @@
 
 格式如下：
 
-![image-20241030202229789](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241030202229789.png)
+![image-20241030202229789](.\doc\image-20241030202229789.png)
 
 **如何提取：**
 
-例如：![image-20241030202338465](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241030202338465.png)
+例如：![image-20241030202338465](.\doc\image-20241030202338465.png)
 
 我们可以获取其最后一次写入时间是 F1 AB。小端存储，我们进行分析
 
@@ -84,7 +87,7 @@ lastWriteTime = (0xAB) << 8 | 0xF1
 
 FAT1表的结构：
 
-![image-20241030203513016](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241030203513016.png)
+![image-20241030203513016](.\doc\image-20241030203513016.png)
 
 
 
@@ -112,7 +115,7 @@ FAT1表的结构：
 
 ### 1.7 MBR结构
 
-![image-20241030204744138](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241030204744138.png)
+![image-20241030204744138](.\doc\image-20241030204744138.png)
 
 ## 3.实现FAT12文件系统
 
@@ -137,9 +140,9 @@ FAT1表的结构：
 
 使用winImage软件创建vfd即可，添加一些文件以及文件夹，子文件夹。
 
-![image-20241102133245714](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102133245714.png)
+![image-20241102133245714](.\doc\image-20241102133245714.png)
 
-软盘的制作也可以采用本地配置InitMBR和InitFat表进行。本实验未采用代码模拟软盘（配有部分代码模拟软盘）。![image-20241102133504311](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102133504311.png)
+软盘的制作也可以采用本地配置InitMBR和InitFat表进行。本实验未采用代码模拟软盘（配有部分代码模拟软盘）。![image-20241102133504311](.\doc\image-20241102133504311.png)
 
 #### 3.3 FAT12介绍
 
@@ -252,7 +255,7 @@ uint8_t  getClus(uint8_t *buf) {
 
 `实现效果`：
 
-![image-20241102134410581](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102134410581.png)
+![image-20241102134410581](.\doc\image-20241102134410581.png)
 
 解析时间的部分在1.5部分叙述，在这里粘贴一部分dir代码：
 
@@ -334,7 +337,7 @@ void dir() {
 
 `效果截图`：cat一个 > 一个簇的文件（需要寻簇的情况）
 
-![image-20241102135510799](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102135510799.png)
+![image-20241102135510799](.\doc\image-20241102135510799.png)
 
 #### 3.8 cd 和 pwd 功能的实现
 
@@ -348,11 +351,11 @@ cd命令我使用了栈来维护路径，记录下当前所在的簇号和路径
 
 `实现效果`:
 
-![image-20241102140029658](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102140029658.png)
+![image-20241102140029658](.\doc\image-20241102140029658.png)
 
 `实现代码`
 
-![image-20241102140119796](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102140119796.png)
+![image-20241102140119796](.\doc\image-20241102140119796.png)
 
 pwd 较为简单，复制一个当前栈内情况，至今拼接路径即可。
 
@@ -378,13 +381,13 @@ pwd 较为简单，复制一个当前栈内情况，至今拼接路径即可。
 
 `实现效果`
 
-![image-20241102141051786](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102141051786.png)
+![image-20241102141051786](.\doc\image-20241102141051786.png)
 
-![image-20241102141111522](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102141111522.png)
+![image-20241102141111522](.\doc\image-20241102141111522.png)
 
 此时dir可以看到
 
-![image-20241102141124653](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102141124653.png)
+![image-20241102141124653](.\doc\image-20241102141124653.png)
 
 `实现代码`(重要部分，其余属性设置在此省略)
 
@@ -440,11 +443,11 @@ pwd 较为简单，复制一个当前栈内情况，至今拼接路径即可。
 
 未删除：
 
-![image-20241102142107418](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102142107418.png)
+![image-20241102142107418](.\doc\image-20241102142107418.png)
 
-![image-20241102142253292](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102142253292.png)
+![image-20241102142253292](.\doc\image-20241102142253292.png)
 
-删除后：![image-20241102142317398](C:\Users\89398\AppData\Roaming\Typora\typora-user-images\image-20241102142317398.png)
+删除后：![image-20241102142317398](.\doc\image-20241102142317398.png)
 
 `实现代码`：
 
@@ -486,13 +489,13 @@ void deleteFile(string filename) {
 
 ​     创建一个目录项，设置目录属性、保留字节、时间等等信息之后，分配对应的簇号，同时标记此簇已经被使用过了。此时创建 . (s当前目录)和..(上一级目录),并且把新目录项写到根目录项中，最后写回磁盘中。
 
-实现效果：
+**实现效果：**
 
-![img](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image001.png)
+![img.png](doc/img.png)
 
 实现代码：
 
-![img](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image003.jpg)
+![img_1.png](doc/img_1.png)
 
 #### 3.12 Format命令
 
@@ -506,29 +509,30 @@ void deleteFile(string filename) {
 
 实现效果：
 
-![表格  描述已自动生成](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image004.png)
+![image-20241102142107418](.\doc\1.png)
 
-1. 其中未改动.
+
+1. 其中MBR未改动.
 
 2. format前FAT
 
-![图形用户界面, 文本  描述已自动生成](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image005.png)
+![image-20241102142107418](.\doc\2.png)
 
 forma*后FAT:
 
-![img](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image006.png)
+![image-20241102142107418](.\doc\3.png)
 
 3. format前根目录区：
 
-![文本  描述已自动生成](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image008.jpg)
+![image-20241102142107418](.\doc\4.png)
 
 ***format\******后目录区：\***
 
-![文本  描述已自动生成](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image010.jpg)
+![image-20241102142107418](.\doc\clear.png)
 
 实现代码：
 
-![img](file:///C:/Users/89398/AppData/Local/Temp/msohtmlclip1/01/clip_image012.jpg)
+![image-20241102142107418](.\doc\5.png)
 
 
 
